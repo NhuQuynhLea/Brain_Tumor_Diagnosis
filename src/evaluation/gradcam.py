@@ -39,11 +39,15 @@ class GradCAM:
     def generate(self, image: torch.Tensor, class_idx: int | None = None) -> np.ndarray:
         """image: (1, C, H, W) on the model's device. Returns CAM as (H, W) in [0, 1]."""
         self.model.zero_grad()
-        logits = self.model(image)
-        if class_idx is None:
-            class_idx = int(logits.argmax(dim=1).item())
-        score = logits[0, class_idx]
-        score.backward(retain_graph=True)
+        with torch.enable_grad():
+            image = image.detach().requires_grad_(True)
+            logits = self.model(image)
+            if class_idx is None:
+                class_idx = int(logits.argmax(dim=1).item())
+            score = logits[0, class_idx]
+            score.backward(retain_graph=True)
+        if self._gradients is None or self._activations is None:
+            raise RuntimeError("Grad-CAM hooks did not fire for the target layer.")
 
         weights = self._gradients.mean(dim=(2, 3), keepdim=True)          # (1, K, 1, 1)
         cam = (weights * self._activations).sum(dim=1, keepdim=True)      # (1, 1, h, w)
