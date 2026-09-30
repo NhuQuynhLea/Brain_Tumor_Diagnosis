@@ -1,5 +1,0 @@
-model,true_class,errors
-custom_cnn,glioma,23
-custom_cnn,meningioma,0
-custom_cnn,notumor,22
-custom_cnn,pituitary,27

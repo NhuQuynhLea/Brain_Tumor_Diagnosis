@@ -1,4 +1,0 @@
-Best model by val/test F1(macro): custom_cnn
-  accuracy=0.2500  f1=0.1000  auc=0.5446
-  params=1240036  gflops=5.173  inference=45.38ms/img
-Ranking by f1_macro: custom_cnn

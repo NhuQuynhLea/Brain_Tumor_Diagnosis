@@ -1,2 +1,0 @@
-,auc_macro,accuracy,precision_macro,recall_macro,specificity_macro,f1_macro,glioma_precision,meningioma_precision,notumor_precision,pituitary_precision,glioma_recall,meningioma_recall,notumor_recall,pituitary_recall,glioma_specificity,meningioma_specificity,notumor_specificity,pituitary_specificity,glioma_f1,meningioma_f1,notumor_f1,pituitary_f1
-custom_cnn,0.5445777882100656,0.25,0.0625,0.25,0.75,0.1,0.0,0.25,0.0,0.0,0.0,1.0,0.0,0.0,1.0,0.0,1.0,1.0,0.0,0.4,0.0,0.0
