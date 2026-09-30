@@ -35,7 +35,8 @@ from src.evaluation.plots import overlay_cam, plot_confusion_matrix, plot_roc_cu
 from src.models.model_factory import build_model
 from src.training.checkpoint import load_checkpoint
 from src.utils.config import load_config, seed_everything
-from src.utils.tracking import get_logger
+from src.utils.runs import resolve_run, use_run
+from src.utils.tracking import get_logger, log_experiment
 
 logger = get_logger("evaluate", Path("results/logs/evaluate.log"))
 
@@ -70,7 +71,7 @@ def gradcam_grid(model, dataset, classes, device, out_path, n=8) -> None:
 
 
 def evaluate_one(cfg, name: str, ckpt: Path, split: str, max_samples: int | None,
-                 device, skip_gradcam: bool) -> dict:
+                 device, skip_gradcam: bool, run_id: str = "") -> dict:
     logger.info("Evaluating %s from %s on %s (%s)", name, ckpt, split, device)
 
     dataset = BrainTumorDataset(Path(cfg.paths.processed_data) / f"{split}.csv",
@@ -81,7 +82,7 @@ def evaluate_one(cfg, name: str, ckpt: Path, split: str, max_samples: int | None
                         num_workers=cfg.training.num_workers)
 
     model = build_model(cfg, name=name).to(device)
-    load_checkpoint(ckpt, model, device=device)
+    ckpt_data = load_checkpoint(ckpt, model, device=device)
 
     y_true, y_pred, y_prob = predict_all(model, loader, device)
     metrics = compute_metrics(y_true, y_pred, cfg.data.classes)
@@ -131,6 +132,10 @@ def evaluate_one(cfg, name: str, ckpt: Path, split: str, max_samples: int | None
         row = pd.concat([old, row], ignore_index=True)
     row.to_csv(comp_path, index=False)
     logger.info("Updated %s", comp_path)
+
+    log_experiment(ckpt_data.get("config") or dict(cfg), name, metrics, split,
+                   source="evaluate", path=Path(cfg.paths.results) / "experiments.csv",
+                   run_id=run_id)
     return metrics
 
 
@@ -138,13 +143,16 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--model", required=True,
                    help="Model name, comma-separated list, or 'all' (every models/*/best.pt)")
-    p.add_argument("--checkpoint", default=None, help="Default: models/<model>/best.pt")
+    p.add_argument("--checkpoint", default=None, help="Default: <run>/models/<model>/best.pt")
+    p.add_argument("--run", default=None, help="run_id, run name, or path (default: latest run)")
     p.add_argument("--split", default="test", choices=["train", "val", "test"])
     p.add_argument("--max-samples", type=int, default=None)
     p.add_argument("--skip-gradcam", action="store_true")
     args = p.parse_args()
 
     cfg = load_config()
+    run_dir = use_run(cfg, resolve_run(cfg, args.run))
+    logger.info("Run dir: %s", run_dir)
     seed_everything(cfg.project.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ckpt_root = Path(cfg.paths.checkpoints)
@@ -164,7 +172,7 @@ def main() -> None:
             logger.warning("%s: checkpoint %s not found, skipping", name, ckpt)
             continue
         summary[name] = evaluate_one(cfg, name, ckpt, args.split,
-                                     args.max_samples, device, args.skip_gradcam)
+                                     args.max_samples, device, args.skip_gradcam, run_dir.name)
         torch.cuda.empty_cache() if device.type == "cuda" else None
 
     if len(summary) > 1:

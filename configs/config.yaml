@@ -8,6 +8,7 @@ paths:
   raw_data: data/raw
   processed_data: data/processed
   results: results
+  runs: results/runs
   figures: results/figures
   logs: results/logs
   metrics: results/metrics

@@ -27,14 +27,15 @@ class GradCAM:
         self._gradients: torch.Tensor | None = None
         self._handles = [
             self.target_layer.register_forward_hook(self._save_activation),
-            self.target_layer.register_full_backward_hook(self._save_gradient),
         ]
 
     def _save_activation(self, _module, _inputs, output):
         self._activations = output.detach()
+        if output.requires_grad:
+            output.register_hook(self._save_gradient)
 
-    def _save_gradient(self, _module, _grad_input, grad_output):
-        self._gradients = grad_output[0].detach()
+    def _save_gradient(self, grad):
+        self._gradients = grad.detach()
 
     def generate(self, image: torch.Tensor, class_idx: int | None = None) -> np.ndarray:
         """image: (1, C, H, W) on the model's device. Returns CAM as (H, W) in [0, 1]."""

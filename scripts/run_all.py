@@ -24,6 +24,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.models.model_factory import available_models
+from src.utils.config import load_config
+from src.utils.runs import create_run, finish_run, resolve_run
 from src.utils.tracking import get_logger
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +49,8 @@ def main() -> None:
     p.add_argument("--batch-size", type=int, default=None)
     p.add_argument("--lr", type=float, default=None)
     p.add_argument("--skip-train", action="store_true", help="Only run evaluate + compare")
+    p.add_argument("--run", default=None, help="With --skip-train: run to evaluate/compare")
+    p.add_argument("--name", default=None, help="Label appended to the run id")
     p.add_argument("--split", default="test", choices=["val", "test"])
     p.add_argument("--extra", nargs="*", default=[], help="Extra args forwarded to train.py")
     args = p.parse_args()
@@ -55,27 +59,38 @@ def main() -> None:
     scripts = ROOT / "scripts"
     models = args.models or available_models()
     t_start = time.time()
+    cfg = load_config()
 
-    if not args.skip_train:
-        cmd = [py, str(scripts / "train_all.py"), "--models", *models]
+    if args.skip_train:
+        run_dir = resolve_run(cfg, args.run)
+        logger.info("Skipping training; using run %s", run_dir.name)
+        own_run = False
+    else:
+        run_dir = create_run(cfg, "run_all", args.name)
+        own_run = True
+        cmd = [py, str(scripts / "train_all.py"), "--models", *models,
+               "--run-dir", str(run_dir)]
         if args.epochs: cmd += ["--epochs", str(args.epochs)]
         if args.batch_size: cmd += ["--batch-size", str(args.batch_size)]
         if args.lr: cmd += ["--lr", str(args.lr)]
         cmd += args.extra
         if not run_step(cmd, f"TRAIN {models}"):
+            finish_run(run_dir, "failed")
             sys.exit(1)
-    else:
-        logger.info("Skipping training (--skip-train).")
 
     if not run_step([py, str(scripts / "evaluate.py"), "--model", "all",
-                     "--split", args.split], "EVALUATE all"):
+                     "--split", args.split, "--run", str(run_dir)], "EVALUATE all"):
+        if own_run: finish_run(run_dir, "failed")
         sys.exit(1)
 
-    if not run_step([py, str(scripts / "compare_models.py")], "COMPARE"):
+    if not run_step([py, str(scripts / "compare_models.py"), "--run", str(run_dir)], "COMPARE"):
+        if own_run: finish_run(run_dir, "failed")
         sys.exit(1)
 
-    logger.info("Pipeline complete in %.1f min. See results/metrics + results/figures.",
-                (time.time() - t_start) / 60)
+    if own_run:
+        finish_run(run_dir)
+    logger.info("Pipeline complete in %.1f min. Run: %s",
+                (time.time() - t_start) / 60, run_dir)
 
 
 if __name__ == "__main__":

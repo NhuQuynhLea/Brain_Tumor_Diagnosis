@@ -21,6 +21,7 @@ from src.models.model_factory import build_model
 from src.training.losses import build_criterion, build_optimizer, build_scheduler, compute_class_weights
 from src.training.trainer import Trainer
 from src.utils.config import load_config, seed_everything
+from src.utils.runs import create_run, finish_run, use_run
 from src.utils.tracking import get_logger
 
 logger = get_logger("tune", Path("results/logs/tune.log"))
@@ -42,6 +43,8 @@ def main() -> None:
 
     cfg = load_config()
     seed_everything(cfg.project.seed)
+    run_dir = create_run(cfg, "tune", args.model)
+    logger.info("Run dir: %s", run_dir)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     rng = np.random.default_rng(cfg.project.seed)
@@ -56,6 +59,7 @@ def main() -> None:
     results = []
     for i, params in enumerate(trials):
         run_cfg = load_config()
+        use_run(run_cfg, run_dir)
         run_cfg.model.name = args.model
         run_cfg.training.epochs = args.epochs
         run_cfg.training.update(params)
@@ -83,6 +87,7 @@ def main() -> None:
     best = df.iloc[0].to_dict()
     with open(Path(cfg.paths.metrics) / f"tuning_{args.model}_best.json", "w") as f:
         json.dump(best, f, indent=2)
+    finish_run(run_dir)
     logger.info("Best trial: %s", best)
 
 

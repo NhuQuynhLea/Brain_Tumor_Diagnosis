@@ -13,6 +13,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.models.model_factory import available_models
+from src.utils.config import load_config
+from src.utils.runs import create_run, finish_run
 from src.utils.tracking import get_logger
 
 logger = get_logger("train_all", Path("results/logs/train_all.log"))
@@ -25,6 +27,8 @@ def main() -> None:
     p.add_argument("--batch-size", type=int, default=None)
     p.add_argument("--lr", type=float, default=None)
     p.add_argument("--debug-batches", type=int, default=None)
+    p.add_argument("--name", default=None, help="Label appended to the run id")
+    p.add_argument("--run-dir", default=None, help="Existing run dir (set by run_all)")
     p.add_argument("--extra", nargs="*", default=[], help="Extra args forwarded to train.py")
     args = p.parse_args()
 
@@ -32,9 +36,13 @@ def main() -> None:
     py = sys.executable
     train_py = Path(__file__).parent / "train.py"
 
+    own_run = not args.run_dir
+    run_dir = create_run(load_config(), "train_all", args.name) if own_run else Path(args.run_dir)
+    logger.info("Run dir: %s", run_dir)
+
     results = {}
     for name in models:
-        cmd = [py, str(train_py), "--model", name]
+        cmd = [py, str(train_py), "--model", name, "--run-dir", str(run_dir)]
         if args.epochs: cmd += ["--epochs", str(args.epochs)]
         if args.batch_size: cmd += ["--batch-size", str(args.batch_size)]
         if args.lr: cmd += ["--lr", str(args.lr)]
@@ -49,6 +57,8 @@ def main() -> None:
     for name, status in results.items():
         logger.info("  %-15s %s", name, status)
     failed = [n for n, s in results.items() if s != "OK"]
+    if own_run:
+        finish_run(run_dir, "failed" if failed else "completed")
     sys.exit(1 if failed else 0)
 
 

@@ -10,6 +10,7 @@ Reads models/<name>/history.csv + results/metrics/<name>_predictions.csv and pro
     python scripts/compare_models.py
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from src.evaluation.complexity import profile_model
 from src.evaluation.plots import plot_roc_curves
 from src.models.model_factory import available_models, build_model
 from src.utils.config import load_config
+from src.utils.runs import resolve_run, use_run
 from src.utils.tracking import get_logger
 
 logger = get_logger("compare", Path("results/logs/compare.log"))
@@ -48,7 +50,13 @@ def mcnemar_test(correct_a: np.ndarray, correct_b: np.ndarray) -> dict:
 
 
 def main() -> None:
+    p = argparse.ArgumentParser()
+    p.add_argument("--run", default=None, help="run_id, run name, or path (default: latest run)")
+    args = p.parse_args()
+
     cfg = load_config()
+    run_dir = use_run(cfg, resolve_run(cfg, args.run))
+    logger.info("Run dir: %s", run_dir)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     models = find_trained_models(cfg)
     if not models:
