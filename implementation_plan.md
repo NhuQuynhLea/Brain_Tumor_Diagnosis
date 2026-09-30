@@ -1,0 +1,146 @@
+# 📋 Implementation Plan: Deep Learning for Brain Tumor Diagnosis from MRI
+
+## Paper Summary
+
+**Title:** Nghiên cứu và xây dựng mô hình học sâu cho bài toán chuẩn đoán u não từ ảnh MRI  
+*(Research and Development of Deep Learning Models for Brain Tumor Diagnosis from MRI Images)*
+
+**Core Idea:** Build, train, and compare multiple CNN-based deep learning architectures to classify brain tumors from MRI images. Evaluate using Accuracy, Sensitivity/Recall, Specificity, and F1-score. Propose the best-performing model for clinical support.
+
+---
+
+## Detailed Task Breakdown
+
+| # | Phase | Task | Description | Key Deliverable | Est. Effort |
+|---|-------|------|-------------|-----------------|-------------|
+| **Phase 1** | **Literature Review & Background** | | | | |
+| 1.1 | Literature | Brain tumor pathology review | Study types of brain tumors (glioma, meningioma, pituitary, no tumor), clinical characteristics, and why early detection matters | Summary document | 2 days |
+| 1.2 | Literature | Medical imaging techniques survey | Review MRI imaging modalities (T1, T2, FLAIR, contrast-enhanced), their characteristics and role in brain tumor diagnosis | Summary document | 1 day |
+| 1.3 | Literature | Deep learning in medical imaging survey | Survey SOTA methods: CNN, ResNet, VGG, EfficientNet, Vision Transformers applied to brain tumor classification; review 15-20 recent papers | Literature review table | 3 days |
+| 1.4 | Literature | Identify baseline & candidate architectures | Select 4-5 architectures to implement (e.g., Custom CNN, VGG16, ResNet50, EfficientNetB0, MobileNetV2) with justification | Architecture selection document | 1 day |
+| **Phase 2** | **Environment Setup** | | | | |
+| 2.1 ✅ | Setup | Set up development environment | Install Python, PyTorch/TensorFlow, CUDA, Jupyter, create virtual environment, define `requirements.txt` | Working dev environment | 0.5 day |
+| 2.2 ✅ | Setup | Define project folder structure | Create standardized directory structure: `data/`, `notebooks/`, `src/`, `models/`, `results/`, `configs/` | Project skeleton | 0.5 day |
+| 2.3 ✅ | Setup | Set up experiment tracking | Configure logging, Weights & Biases / TensorBoard for tracking metrics, hyperparameters, and model checkpoints | Tracking dashboard | 0.5 day |
+| 2.4 ✅ | Setup | Set up configuration management | Create config files (YAML/JSON) for hyperparameters, paths, model selection — ensure reproducibility | Config system | 0.5 day |
+| **Phase 3** | **Data Collection & Preprocessing** | | | | |
+| 3.1 ✅ | Data | Identify & download dataset | Select public dataset (e.g., [Kaggle Brain Tumor MRI Dataset](https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset) — 4 classes: glioma, meningioma, pituitary, no tumor) | Raw dataset downloaded | 0.5 day |
+| 3.2 ✅ | Data | Exploratory Data Analysis (EDA) | Analyze class distribution, image dimensions, intensity distributions; visualize sample images from each class | EDA notebook with charts | 1 day |
+| 3.3 ✅ | Data | Data cleaning & quality check | Remove corrupted/duplicate images, verify labels, handle any mislabeled samples | Clean dataset | 0.5 day |
+| 3.4 ✅ | Data | Image preprocessing pipeline | Implement: resize to uniform size (e.g., 224×224), normalize pixel values (0-1 or ImageNet stats), convert to tensors | `preprocessing.py` | 1 day |
+| 3.5 ✅ | Data | Data splitting | Split into Train/Validation/Test sets (70/15/15 or 80/10/10) with stratified sampling to preserve class ratios | Split datasets | 0.5 day |
+| 3.6 ✅ | Data | Data augmentation strategy | Implement augmentations: random rotation, horizontal flip, zoom, brightness/contrast adjustment, elastic deformation | `augmentation.py` | 1 day |
+| 3.7 ✅ | Data | Create DataLoader/Dataset classes | Build custom PyTorch `Dataset` and `DataLoader` classes with on-the-fly augmentation for training | `dataset.py` | 1 day |
+| 3.8 ✅ | Data | Verify data pipeline end-to-end | Load a batch, visualize augmented samples, check shapes and labels are correct | Verification notebook | 0.5 day |
+| **Phase 4** | **Model Development** | | | | |
+| 4.1 ✅ | Model | Build custom CNN baseline | Design a simple CNN from scratch (3-5 conv blocks, batch norm, dropout, FC layers) as baseline | `models/custom_cnn.py` | 1 day |
+| 4.2 ✅ | Model | Implement VGG16 (transfer learning) | Load pretrained VGG16, freeze early layers, replace classifier head for 4-class output | `models/vgg16.py` | 1 day |
+| 4.3 ✅ | Model | Implement ResNet50 (transfer learning) | Load pretrained ResNet50, freeze backbone, add custom classification head | `models/resnet50.py` | 1 day |
+| 4.4 ✅ | Model | Implement EfficientNetB0 (transfer learning) | Load pretrained EfficientNetB0, fine-tune with custom head | `models/efficientnet.py` | 1 day |
+| 4.5 ✅ | Model | Implement MobileNetV2 (transfer learning) | Load pretrained MobileNetV2, adapt for brain tumor classification | `models/mobilenet.py` | 1 day |
+| 4.6 ✅ | Model | Create model factory/registry | Build a unified interface to instantiate any model by name from config | `models/model_factory.py` | 0.5 day |
+| 4.7 ✅ | Model | Define loss function & optimizer | Implement CrossEntropyLoss (with optional class weights for imbalance), Adam/AdamW optimizer, learning rate scheduler | `training/losses.py` | 0.5 day |
+| **Phase 5** | **Training & Evaluation** | | | | |
+| 5.1 ✅ | Training | Build training loop | Implement training loop with: forward pass, loss computation, backprop, gradient clipping, logging per epoch | `training/trainer.py` | 1.5 days |
+| 5.2 ✅ | Training | Build validation loop | Implement validation loop: compute loss & metrics on val set after each epoch, early stopping logic | `training/trainer.py` | 0.5 day |
+| 5.3 ✅ | Training | Implement metrics computation | Code Accuracy, Precision, Recall/Sensitivity, Specificity, F1-score (macro & per-class) | `evaluation/metrics.py` | 1 day |
+| 5.4 ✅ | Training | Implement model checkpointing | Save best model (by val F1 or val loss), save last model, save training state for resume | Checkpoint logic | 0.5 day |
+| 5.5 ⏳ | Training | Train Custom CNN | Run full training, tune hyperparameters, record results — *code ready, run on GPU machine* | Trained model + logs | 1 day |
+| 5.6 ⏳ | Training | Train VGG16 | Run full training with fine-tuning strategy, record results — *code ready, run on GPU machine* | Trained model + logs | 1 day |
+| 5.7 ⏳ | Training | Train ResNet50 | Run full training, experiment with unfreezing layers, record results — *code ready, run on GPU machine* | Trained model + logs | 1 day |
+| 5.8 ⏳ | Training | Train EfficientNetB0 | Run full training, record results — *code ready, run on GPU machine* | Trained model + logs | 1 day |
+| 5.9 ⏳ | Training | Train MobileNetV2 | Run full training, record results — *code ready, run on GPU machine* | Trained model + logs | 1 day |
+| 5.10 ✅ | Training | Hyperparameter tuning | For the top 2-3 models: tune learning rate, batch size, dropout, weight decay, augmentation intensity — `scripts/tune.py` (random search) | Tuning results table | 2 days |
+| **Phase 6** | **Analysis & Comparison** | | | | |
+| 6.1 ✅ | Evaluation | Generate confusion matrices | Plot confusion matrix for each model on test set (per-class performance visualization) | Confusion matrix plots | 0.5 day |
+| 6.2 ✅ | Evaluation | Plot training curves | Visualize train/val loss and accuracy curves for all models | Training curve plots | 0.5 day |
+| 6.3 ✅ | Evaluation | Compute full evaluation metrics table | Create comparison table: Accuracy, Precision, Recall, Specificity, F1-score (macro + per-class) for all models | Metrics comparison table | 0.5 day |
+| 6.4 ✅ | Evaluation | ROC curves & AUC | Plot ROC curves (one-vs-rest) and compute AUC for each model | ROC/AUC plots | 1 day |
+| 6.5 ✅ | Evaluation | Statistical significance testing | Perform McNemar's test or paired t-test between top models to verify significant differences | Statistical test results | 0.5 day |
+| 6.6 ✅ | Evaluation | Grad-CAM / interpretability | Implement Grad-CAM to visualize which regions the model focuses on for predictions | Grad-CAM heatmaps | 1 day |
+| 6.7 ✅ | Evaluation | Error analysis | Analyze misclassified samples: identify common failure patterns, per-class error rates | Error analysis report | 1 day |
+| 6.8 ✅ | Evaluation | Model complexity comparison | Compare parameter count, FLOPs, inference time, and model size across all architectures | Complexity table | 0.5 day |
+| 6.9 ⏳ | Evaluation | Select best model & justify | Based on all metrics, interpretability, and efficiency — propose the optimal model with justification — *auto-generated by compare_models.py after GPU runs* | Final recommendation | 0.5 day |
+| **Phase 7** | **Documentation & Reporting** | | | | |
+| 7.1 | Report | Write Introduction chapter | Motivation, problem statement, objectives, scope | Chapter draft | 1 day |
+| 7.2 | Report | Write Literature Review chapter | Background on brain tumors, MRI, deep learning methods, related works | Chapter draft | 2 days |
+| 7.3 | Report | Write Methodology chapter | Data pipeline, model architectures, training procedures, evaluation metrics | Chapter draft | 2 days |
+| 7.4 | Report | Write Experiments & Results chapter | Dataset description, experimental setup, results tables, comparison charts | Chapter draft | 2 days |
+| 7.5 | Report | Write Discussion & Conclusion | Interpret results, limitations, future work, propose best model | Chapter draft | 1 day |
+| 7.6 | Report | Prepare figures and tables | Create publication-quality figures, format all tables consistently | Final figures/tables | 1 day |
+| 7.7 | Report | Code cleanup & documentation | Add docstrings, type hints, clean notebooks, write `README.md` for reproducibility | Clean codebase | 1 day |
+| 7.8 | Report | Create reproducibility package | Final `requirements.txt`, training scripts, inference demo, pretrained model weights | Release package | 1 day |
+
+---
+
+## Summary
+
+| Phase | Tasks | Est. Total Effort |
+|-------|-------|-------------------|
+| 1. Literature Review | 4 tasks | 7 days |
+| 2. Environment Setup | 4 tasks | 2 days |
+| 3. Data Processing | 8 tasks | 6 days |
+| 4. Model Development | 7 tasks | 6 days |
+| 5. Training & Evaluation | 10 tasks | 10.5 days |
+| 6. Analysis & Comparison | 9 tasks | 6 days |
+| 7. Documentation | 8 tasks | 11 days |
+| **Total** | **50 tasks** | **~48.5 days** |
+
+> [!TIP]
+> Phases 1-2 can be partially parallelized. Phases 4-5 are the heaviest compute workload — ensure GPU access (Google Colab Pro, Kaggle, or local GPU).
+
+> [!IMPORTANT]
+> **Candidate Architectures:** Custom CNN (baseline), VGG16, ResNet50, EfficientNetB0, MobileNetV2. These cover a range from simple to efficient modern architectures. Consider adding a Vision Transformer (ViT) if time permits.
+
+> [!NOTE]
+> **Recommended Dataset:** [Kaggle Brain Tumor MRI Dataset](https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset) — 7,023 images, 4 classes (glioma, meningioma, pituitary, no tumor). Well-established and widely cited.
+
+---
+
+## Implementation Log — Phases 2 & 3 (completed 2026-09-30)
+
+**Phase 2 — Environment Setup**
+- `.venv/` virtualenv (Python 3.12) + `requirements.txt` — torch 2.5.1 **CPU-only** (no GPU detected on this machine).
+- Folder skeleton: `data/{raw,processed}`, `src/{data,models,training,evaluation,utils}`, `models/`, `results/{figures,logs,metrics}`, `configs/`, `scripts/`, `notebooks/`.
+- Tracking: `src/utils/tracking.py` — TensorBoard `SummaryWriter` + per-run `metrics.csv` (TensorBoard chosen over W&B: no API key needed).
+- Config: `configs/config.yaml` + `src/utils/config.py` (paths, splits, augmentation, training hyperparams, seed).
+
+**Phase 3 — Data Pipeline**
+- Dataset v2 downloaded via `kagglehub` → `data/raw/` (**7,200 images, perfectly balanced: 1,800/class** — newer version than the 7,023-image v1).
+- Cleaning (`scripts/run_cleaning.py`): 0 corrupted, **187 exact-duplicate images removed** (md5) → `data/processed/clean.csv` (7,013 images).
+- Split (`scripts/run_split.py`): merged original `Training/`+`Testing/` folders and re-split **stratified 70/15/15** → `train.csv` (4,909) / `val.csv` (1,052) / `test.csv` (1,052).
+- Preprocessing/augmentation: `src/data/preprocessing.py`, `src/data/augmentation.py` (albumentations: rotate, h-flip, zoom, brightness/contrast, elastic, resize 224×224, ImageNet normalize).
+- `src/data/dataset.py`: `BrainTumorDataset` + `build_dataloaders()`; verified end-to-end by `scripts/verify_pipeline.py` — batch `(32, 3, 224, 224)`, labels 0–3, augmentation active.
+- EDA: `scripts/run_eda.py` + executed `notebooks/01_eda.ipynb` → `results/figures/*.png`, `results/metrics/eda_summary.csv`.
+
+**Notes / new findings for later phases**
+- ⚠️ No GPU on this machine — Phase 5 training will be slow on CPU. Consider Google Colab / Kaggle GPU, or reduce epochs.
+- `training.num_workers=0` in config (Windows DataLoader limitation).
+- New task added below (2.5): convenience runner for the data pipeline.
+
+| 2.5 ✅ | Setup | Pipeline runner scripts | `scripts/` entrypoints for download → EDA → clean → split → verify so the whole data pipeline is reproducible with 5 commands | `scripts/*.py` | — |
+
+**Phase 4 — Model Development** (completed 2026-09-30)
+- Model code lives in `src/models/` (the `models/` dir is reserved for checkpoints). Verified by `scripts/smoke_test_models.py` — every model ran forward + backward + optimizer step on a real training batch.
+
+| Model | Total params | Trainable | Frozen |
+|---|---|---|---|
+| custom_cnn | 1,240,036 | 1,240,036 | 0 |
+| vgg16 | 27,562,308 | 12,847,620 | 14,714,688 |
+| resnet50 | 23,516,228 | 8,196 | 23,508,032 |
+| efficientnetb0 | 4,012,672 | 5,124 | 4,007,548 |
+| mobilenetv2 | 2,228,996 | 5,124 | 2,223,872 |
+
+- Transfer models default to `freeze_backbone: true` (classifier head only); set `model.freeze_backbone: false` in `configs/config.yaml` for full fine-tuning.
+- `src/training/losses.py`: `compute_class_weights` (inverse-frequency), `build_criterion` (CrossEntropy ± class weights), `build_optimizer` (AdamW/Adam/SGD), `build_scheduler` (Cosine/Step/Plateau).
+
+**Phases 5 & 6 — code implemented 2026-09-30** (training runs pending GPU machine)
+- `src/training/trainer.py`: `Trainer` — per-epoch train/val loops, grad clipping, early stopping on `val_f1_macro`, scheduler step, TensorBoard + log + `history.csv`.
+- `src/training/checkpoint.py`: `save_checkpoint`/`load_checkpoint` → `models/<model>/{best.pt,last.pt}` with optimizer/scheduler state for `--resume`.
+- `src/evaluation/metrics.py`: accuracy, precision/recall/**specificity**/F1 (macro + per-class via one-vs-rest confusion matrix).
+- `src/evaluation/gradcam.py`: auto-detects last Conv2d; works with all 5 architectures.
+- `src/evaluation/complexity.py`: params, GFLOPs (native `FlopCounterMode`), size MB, inference latency.
+- Scripts: `scripts/train.py` (`--model --epochs --lr --resume --finetune --debug-batches`), `scripts/train_all.py`, `scripts/evaluate.py` (`--model all` evaluates every checkpoint in one run; also accepts comma lists), `scripts/run_all.py` (one background-friendly command: train all → eval all → compare), `scripts/tune.py` (random search), `scripts/compare_models.py` (comparison table, complexity, McNemar top-2, final recommendation).
+- Verified on CPU via `--debug-batches` + `evaluate.py --max-samples` + `compare_models.py` — full pipeline runs end-to-end.
+- 🐛 **Bugfix:** `Config.__setattr__` added — CLI overrides (`--epochs`, `--lr`, `--debug-batches`) previously wrote attributes instead of dict items and were silently ignored.
+- Reproduce instructions added to `README.md` (venv → install → data → train → eval → compare).

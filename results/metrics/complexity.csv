@@ -1,0 +1,2 @@
+,params_total,params_trainable,size_mb,gflops,inference_ms,checkpoint_mb
+custom_cnn,1240036.0,1240036.0,4.73,5.173,45.38,14.23
