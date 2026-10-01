@@ -36,7 +36,7 @@ from src.models.model_factory import build_model
 from src.training.checkpoint import load_checkpoint
 from src.utils.config import load_config, seed_everything
 from src.utils.runs import resolve_run, use_run
-from src.utils.tracking import get_logger, log_experiment
+from src.utils.tracking import add_log_file, get_logger, log_experiment
 
 logger = get_logger("evaluate", Path("results/logs/evaluate.log"))
 
@@ -152,6 +152,7 @@ def main() -> None:
 
     cfg = load_config()
     run_dir = use_run(cfg, resolve_run(cfg, args.run))
+    add_log_file(logger, run_dir / "logs" / "evaluate.log")
     logger.info("Run dir: %s", run_dir)
     seed_everything(cfg.project.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

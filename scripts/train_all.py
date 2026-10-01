@@ -3,6 +3,7 @@
     python scripts/train_all.py                # all 5 models, config defaults
     python scripts/train_all.py --models resnet50 efficientnetb0
     python scripts/train_all.py --epochs 30 --batch-size 32
+    python scripts/train_all.py --models resnet50 efficientnetb0 mobilenetv2 --lr 0.0001 --extra --finetune
 """
 
 import argparse
@@ -15,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.models.model_factory import available_models
 from src.utils.config import load_config
 from src.utils.runs import create_run, finish_run
-from src.utils.tracking import get_logger
+from src.utils.tracking import add_log_file, get_logger
 
 logger = get_logger("train_all", Path("results/logs/train_all.log"))
 
@@ -29,7 +30,8 @@ def main() -> None:
     p.add_argument("--debug-batches", type=int, default=None)
     p.add_argument("--name", default=None, help="Label appended to the run id")
     p.add_argument("--run-dir", default=None, help="Existing run dir (set by run_all)")
-    p.add_argument("--extra", nargs="*", default=[], help="Extra args forwarded to train.py")
+    p.add_argument("--extra", nargs=argparse.REMAINDER, default=[],
+                   help="Everything after --extra is forwarded to train.py (must be last)")
     args = p.parse_args()
 
     models = args.models or available_models()
@@ -38,6 +40,7 @@ def main() -> None:
 
     own_run = not args.run_dir
     run_dir = create_run(load_config(), "train_all", args.name) if own_run else Path(args.run_dir)
+    add_log_file(logger, run_dir / "logs" / "train_all.log")
     logger.info("Run dir: %s", run_dir)
 
     results = {}

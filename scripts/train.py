@@ -24,7 +24,7 @@ from src.training.losses import build_criterion, build_optimizer, build_schedule
 from src.training.trainer import Trainer
 from src.utils.config import load_config, seed_everything
 from src.utils.runs import create_run, finish_run, use_run
-from src.utils.tracking import ExperimentTracker, get_logger, log_experiment
+from src.utils.tracking import ExperimentTracker, add_log_file, get_logger, log_experiment
 
 logger = get_logger("train", Path("results/logs/train.log"))
 
@@ -72,6 +72,7 @@ def main() -> None:
     models_root = Path(cfg.paths.checkpoints)
     own_run = not args.run_dir
     run_dir = create_run(cfg, "train", args.name) if own_run else use_run(cfg, args.run_dir)
+    add_log_file(logger, run_dir / "logs" / f"train_{cfg.model.name}.log")
     logger.info("Run dir: %s", run_dir)
 
     try:

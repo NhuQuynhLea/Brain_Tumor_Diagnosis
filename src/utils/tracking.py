@@ -22,11 +22,19 @@ def get_logger(name: str, log_file: Path | None = None) -> logging.Logger:
     logger.addHandler(console)
 
     if log_file is not None:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        fh = logging.FileHandler(log_file, encoding="utf-8")
-        fh.setFormatter(fmt)
-        logger.addHandler(fh)
+        add_log_file(logger, log_file)
     return logger
+
+
+def add_log_file(logger: logging.Logger, log_file: Path) -> Path:
+    """Attach a FileHandler so `logger` also writes to `log_file` (e.g. inside a run dir)."""
+    log_file = Path(log_file)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    fh = logging.FileHandler(log_file, encoding="utf-8")
+    if logger.handlers and logger.handlers[0].formatter:
+        fh.setFormatter(logger.handlers[0].formatter)
+    logger.addHandler(fh)
+    return log_file
 
 
 class ExperimentTracker:

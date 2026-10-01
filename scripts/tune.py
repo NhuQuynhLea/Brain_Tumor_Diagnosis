@@ -22,7 +22,7 @@ from src.training.losses import build_criterion, build_optimizer, build_schedule
 from src.training.trainer import Trainer
 from src.utils.config import load_config, seed_everything
 from src.utils.runs import create_run, finish_run, use_run
-from src.utils.tracking import get_logger
+from src.utils.tracking import add_log_file, get_logger
 
 logger = get_logger("tune", Path("results/logs/tune.log"))
 
@@ -44,6 +44,7 @@ def main() -> None:
     cfg = load_config()
     seed_everything(cfg.project.seed)
     run_dir = create_run(cfg, "tune", args.model)
+    add_log_file(logger, run_dir / "logs" / "tune.log")
     logger.info("Run dir: %s", run_dir)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

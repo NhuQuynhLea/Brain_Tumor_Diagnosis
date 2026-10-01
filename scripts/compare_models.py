@@ -30,7 +30,7 @@ from src.evaluation.plots import plot_roc_curves
 from src.models.model_factory import available_models, build_model
 from src.utils.config import load_config
 from src.utils.runs import resolve_run, use_run
-from src.utils.tracking import get_logger
+from src.utils.tracking import add_log_file, get_logger
 
 logger = get_logger("compare", Path("results/logs/compare.log"))
 
@@ -56,6 +56,7 @@ def main() -> None:
 
     cfg = load_config()
     run_dir = use_run(cfg, resolve_run(cfg, args.run))
+    add_log_file(logger, run_dir / "logs" / "compare.log")
     logger.info("Run dir: %s", run_dir)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     models = find_trained_models(cfg)
