@@ -24,6 +24,8 @@ logger = get_logger("train_all", Path("results/logs/train_all.log"))
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--models", nargs="*", default=None, help="Subset of models to train")
+    p.add_argument("--config", default=None, help="Path to YAML config (default: configs/config.yaml)")
+    p.add_argument("--seed", type=int, default=None, help="Override project.seed for all models")
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--batch-size", type=int, default=None)
     p.add_argument("--lr", type=float, default=None)
@@ -39,13 +41,18 @@ def main() -> None:
     train_py = Path(__file__).parent / "train.py"
 
     own_run = not args.run_dir
-    run_dir = create_run(load_config(), "train_all", args.name) if own_run else Path(args.run_dir)
+    run_cfg = load_config(args.config)
+    if args.seed is not None:
+        run_cfg.project.seed = args.seed
+    run_dir = create_run(run_cfg, "train_all", args.name) if own_run else Path(args.run_dir)
     add_log_file(logger, run_dir / "logs" / "train_all.log")
     logger.info("Run dir: %s", run_dir)
 
     results = {}
     for name in models:
         cmd = [py, str(train_py), "--model", name, "--run-dir", str(run_dir)]
+        if args.config: cmd += ["--config", args.config]
+        if args.seed is not None: cmd += ["--seed", str(args.seed)]
         if args.epochs: cmd += ["--epochs", str(args.epochs)]
         if args.batch_size: cmd += ["--batch-size", str(args.batch_size)]
         if args.lr: cmd += ["--lr", str(args.lr)]

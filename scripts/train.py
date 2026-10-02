@@ -42,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--run-dir", default=None, help="Existing run dir (set by train_all/run_all)")
     p.add_argument("--finetune", action="store_true", help="Unfreeze backbone for full fine-tuning")
     p.add_argument("--no-pretrained", action="store_true")
+    p.add_argument("--seed", type=int, default=None, help="Override project.seed from config")
     p.add_argument("--debug-batches", type=int, default=None,
                    help="Limit batches per epoch (quick pipeline test)")
     return p.parse_args()
@@ -64,6 +65,8 @@ def main() -> None:
         cfg.model.pretrained = False
     if args.debug_batches:
         cfg.training.debug_batches = args.debug_batches
+    if args.seed is not None:
+        cfg.project.seed = args.seed
 
     seed_everything(cfg.project.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"

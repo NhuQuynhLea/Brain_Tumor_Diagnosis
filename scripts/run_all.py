@@ -46,6 +46,8 @@ def run_step(cmd: list[str], label: str) -> bool:
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--models", nargs="*", default=None, help="Subset of models")
+    p.add_argument("--config", default=None, help="Path to YAML config (default: configs/config.yaml)")
+    p.add_argument("--seed", type=int, default=None, help="Override project.seed (multi-seed runs)")
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--batch-size", type=int, default=None)
     p.add_argument("--lr", type=float, default=None)
@@ -61,7 +63,9 @@ def main() -> None:
     scripts = ROOT / "scripts"
     models = args.models or available_models()
     t_start = time.time()
-    cfg = load_config()
+    cfg = load_config(args.config)
+    if args.seed is not None:
+        cfg.project.seed = args.seed
 
     if args.skip_train:
         run_dir = resolve_run(cfg, args.run)
@@ -77,6 +81,8 @@ def main() -> None:
         if args.epochs: cmd += ["--epochs", str(args.epochs)]
         if args.batch_size: cmd += ["--batch-size", str(args.batch_size)]
         if args.lr: cmd += ["--lr", str(args.lr)]
+        if args.config: cmd += ["--config", args.config]
+        if args.seed is not None: cmd += ["--seed", str(args.seed)]
         if args.extra: cmd += ["--extra", *args.extra]
         if not run_step(cmd, f"TRAIN {models}"):
             finish_run(run_dir, "failed")
