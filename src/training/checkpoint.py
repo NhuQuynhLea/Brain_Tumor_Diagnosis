@@ -1,10 +1,16 @@
 """Model checkpointing: save best/last, load for resume or evaluation."""
 
+import pathlib
+import sys
 from pathlib import Path
 from typing import Any
 
 import torch
 import torch.nn as nn
+
+# Python 3.13+ moved pathlib classes to pathlib._local; alias it so checkpoints
+# pickled on newer Python still load here.
+sys.modules.setdefault("pathlib._local", pathlib)
 
 
 def save_checkpoint(

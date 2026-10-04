@@ -43,6 +43,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--finetune", action="store_true", help="Unfreeze backbone for full fine-tuning")
     p.add_argument("--no-pretrained", action="store_true")
     p.add_argument("--seed", type=int, default=None, help="Override project.seed from config")
+    p.add_argument("--data-dir", default=None,
+                   help="Override paths.processed_data (e.g. data/external/<name> for task 7.5)")
     p.add_argument("--debug-batches", type=int, default=None,
                    help="Limit batches per epoch (quick pipeline test)")
     return p.parse_args()
@@ -67,6 +69,8 @@ def main() -> None:
         cfg.training.debug_batches = args.debug_batches
     if args.seed is not None:
         cfg.project.seed = args.seed
+    if args.data_dir:
+        cfg.paths.processed_data = args.data_dir
 
     seed_everything(cfg.project.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"

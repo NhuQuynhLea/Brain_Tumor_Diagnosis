@@ -10,19 +10,24 @@ from tqdm import tqdm
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 
 
-def scan_dataset(raw_dir: Path, classes: list[str]) -> pd.DataFrame:
-    """Scan raw_dir/**/<class>/* images into a DataFrame [filepath, label, source_split]."""
+def scan_dataset(raw_dir: Path, classes) -> pd.DataFrame:
+    """Scan raw_dir/**/<class>/* images into a DataFrame [filepath, label, source_split].
+
+    `classes` is a list of accepted label names, or a dict {folder_name: label}
+    to remap external folder names onto our class names.
+    """
+    label_map = dict(classes) if isinstance(classes, dict) else {c: c for c in classes}
     rows = []
     for img_path in sorted(raw_dir.rglob("*")):
         if img_path.suffix.lower() not in IMAGE_EXTS:
             continue
         label = img_path.parent.name.lower()
-        if label not in classes:
+        if label not in label_map:
             continue
         rows.append(
             {
                 "filepath": str(img_path),
-                "label": label,
+                "label": label_map[label],
                 "source_split": img_path.parent.parent.name.lower(),
             }
         )
