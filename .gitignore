@@ -7,4 +7,4 @@ data/external
 data/external_raw/
 data/processed/
 results/
-models/
+/models/

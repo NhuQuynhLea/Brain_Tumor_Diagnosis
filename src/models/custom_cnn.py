@@ -22,26 +22,24 @@ class ConvBlock(nn.Module):
 
 
 class CustomCNN(nn.Module):
-    """Baseline CNN: 4 ConvBlocks (32-64-128-256) -> GAP -> FC -> dropout -> FC.
+    """Baseline CNN: 4 ConvBlocks -> GAP -> FC -> dropout -> FC.
 
     Input: (B, 3, 224, 224). Output: (B, num_classes) logits.
     """
 
-    def __init__(self, num_classes: int = 4, dropout: float = 0.5):
+    def __init__(self, num_classes: int = 4, dropout: float = 0.5,
+                 widths: tuple = (32, 64, 128, 256)):
         super().__init__()
-        self.features = nn.Sequential(
-            ConvBlock(3, 32),
-            ConvBlock(32, 64),
-            ConvBlock(64, 128),
-            ConvBlock(128, 256),
-        )
+        blocks = [ConvBlock(3, widths[0])]
+        blocks += [ConvBlock(a, b) for a, b in zip(widths, widths[1:])]
+        self.features = nn.Sequential(*blocks)
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(256, 256),
+            nn.Linear(widths[-1], widths[-1]),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
-            nn.Linear(256, num_classes),
+            nn.Linear(widths[-1], num_classes),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -50,5 +48,10 @@ class CustomCNN(nn.Module):
         return self.classifier(x)
 
 
-def build_custom_cnn(num_classes: int = 4, dropout: float = 0.5, **_: object) -> CustomCNN:
-    return CustomCNN(num_classes=num_classes, dropout=dropout)
+def build_custom_cnn(num_classes: int = 4, dropout: float = 0.5,
+                     widths: tuple = (32, 64, 128, 256), **_: object) -> CustomCNN:
+    return CustomCNN(num_classes=num_classes, dropout=dropout, widths=widths)
+
+
+def build_custom_cnn_tiny(num_classes: int = 4, dropout: float = 0.5, **_: object) -> CustomCNN:
+    return CustomCNN(num_classes=num_classes, dropout=dropout, widths=(16, 32, 64, 128))

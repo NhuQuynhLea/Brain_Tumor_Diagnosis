@@ -32,7 +32,8 @@ logger = get_logger("train", Path("results/logs/train.log"))
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--model", required=True,
-                   help="custom_cnn | vgg16 | resnet50 | efficientnetb0 | mobilenetv2")
+                   help="custom_cnn | vgg16 | resnet50 | efficientnetb0 | mobilenetv2 | "
+                        "mpac_resnet | lsnet | *_tiny variants")
     p.add_argument("--config", default=None, help="Path to YAML config (default: configs/config.yaml)")
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--batch-size", type=int, default=None)

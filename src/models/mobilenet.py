@@ -24,3 +24,13 @@ def build_mobilenet(
         nn.Linear(in_features, num_classes),
     )
     return model
+
+
+def build_mobilenet_tiny(
+    num_classes: int = 4,
+    dropout: float = 0.5,
+    width_mult: float = 0.35,
+    **_: object,
+) -> nn.Module:
+    return models.mobilenet_v2(weights=None, width_mult=width_mult,
+                               num_classes=num_classes, dropout=dropout)

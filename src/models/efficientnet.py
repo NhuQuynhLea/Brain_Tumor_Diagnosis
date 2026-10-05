@@ -2,6 +2,7 @@
 
 import torch.nn as nn
 from torchvision import models
+from torchvision.models.efficientnet import _efficientnet, _efficientnet_conf
 
 
 def build_efficientnet(
@@ -24,3 +25,15 @@ def build_efficientnet(
         nn.Linear(in_features, num_classes),
     )
     return model
+
+
+def build_efficientnet_tiny(
+    num_classes: int = 4,
+    dropout: float = 0.5,
+    width_mult: float = 0.4,
+    **_: object,
+) -> nn.Module:
+    conf, last_channel = _efficientnet_conf(
+        "efficientnet_b0", width_mult=width_mult, depth_mult=1.0)
+    return _efficientnet(conf, dropout, last_channel, weights=None,
+                         progress=False, num_classes=num_classes)

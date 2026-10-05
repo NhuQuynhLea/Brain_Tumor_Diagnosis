@@ -44,6 +44,8 @@ augmentation:
 
 model:
   name: custom_cnn          # custom_cnn | vgg16 | resnet50 | efficientnetb0 | mobilenetv2
+                            # mpac_resnet | lsnet | *_tiny (mpac_resnet_tiny, resnet_tiny,
+                            # efficientnet_tiny, mobilenet_tiny, custom_cnn_tiny)
   pretrained: true
   freeze_backbone: true     # transfer models: train classifier head only
   dropout: 0.5
