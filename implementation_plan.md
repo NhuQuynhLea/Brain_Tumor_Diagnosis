@@ -105,6 +105,10 @@
 | 9.13 ⏳ | Evaluation | Grad-CAM comparison | Do MPAC blocks attend to more clinically relevant regions than standard convs? MPAC-ResNet vs ResNet50-FT heatmaps | Grad-CAM comparison figure | 0.5 day |
 | 9.14 ⏳ | Evaluation | Cross-dataset eval of MPAC-ResNet | Evaluate on decontaminated Figshare subset (task 7.4b subset, ~250 imgs) | Generalization metrics | 0.5 day |
 | 9.15 ⏳ | Report | Paper integration | Update SOTA table (add LS-Net + new models), write "Proposed Method" (MPAC-ResNet) + "Downscaling Analysis" sections, update acc-efficiency figures, revise Introduction contributions | Paper sections | 2 days |
+| 9.16 ✅ | Model | Add resnet18 to registry | `src/models/resnet18.py` + `MODEL_REGISTRY["resnet18"]` — needed as ablation baseline (MPAC-ResNet = ResNet-18 + MPAC in stages 3-4) | `src/models/resnet18.py` | 0.25 day |
+| 9.17 ⏳ | Training | Ablation: what MPAC adds | ResNet-18-FT vs MPAC-ResNet-18-FT, identical recipe (lr 1e-4, 30 epochs, seeds 42/123/456) — isolates MPAC block contribution at fixed backbone | Ablation results | 1 day |
+| 9.18 ⏳ | Evaluation | Reference/efficiency trade-off | Rerun MPAC-ResNet-FT at lr 1e-4 (matches ResNet50-FT recipe) → acc vs params/FLOPs/FPS comparison (extends 9.11) | Trade-off table | 0.5 day |
+| 9.19 ⏳ | Evaluation | Hybrid vs pure MPAC | MPAC-ResNet vs LS-Net head-to-head: McNemar test + 3-seed mean±std — does residual-hybrid beat pure-MPAC? | Significance results | 0.5 day |
 
 ---
 
@@ -120,8 +124,8 @@
 | 6. Analysis & Comparison | 14 tasks | 8.5 days |
 | 7. Cross-dataset Generalization | 6 tasks | 4 days |
 | 8. Documentation | 8 tasks | 11 days |
-| 9. LS-Net / MPAC Integration | 15 tasks | ~14 days |
-| **Total** | **82 tasks** | **~74 days** |
+| 9. LS-Net / MPAC Integration | 19 tasks | ~16 days |
+| **Total** | **86 tasks** | **~76 days** |
 
 > [!TIP]
 > Phases 1-2 can be partially parallelized. Phases 4-5 are the heaviest compute workload — ensure GPU access (Google Colab Pro, Kaggle, or local GPU).

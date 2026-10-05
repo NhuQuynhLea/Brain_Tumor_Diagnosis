@@ -7,12 +7,14 @@ from src.models.efficientnet import build_efficientnet, build_efficientnet_tiny
 from src.models.litespeed_net import build_lsnet
 from src.models.mobilenet import build_mobilenet, build_mobilenet_tiny
 from src.models.mpac_resnet import build_mpac_resnet, build_mpac_resnet_tiny, build_resnet_tiny
+from src.models.resnet18 import build_resnet18
 from src.models.resnet50 import build_resnet50
 from src.models.vgg16 import build_vgg16
 
 MODEL_REGISTRY = {
     "custom_cnn": build_custom_cnn,
     "vgg16": build_vgg16,
+    "resnet18": build_resnet18,
     "resnet50": build_resnet50,
     "efficientnetb0": build_efficientnet,
     "mobilenetv2": build_mobilenet,
