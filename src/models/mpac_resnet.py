@@ -52,5 +52,5 @@ def build_mpac_resnet_tiny(num_classes=4, dropout=0.5,
 
 
 def build_resnet_tiny(num_classes=4, dropout=0.5,
-                      widths=(24, 48, 96, 192), layers=(1, 1, 1, 1), **_):
+                      widths=(24, 48, 96, 192), layers=(4, 3, 2, 1), **_):
     return CompactResNet(BasicBlock, layers, widths, num_classes, dropout)
