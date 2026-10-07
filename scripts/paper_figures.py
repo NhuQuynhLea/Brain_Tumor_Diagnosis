@@ -70,7 +70,11 @@ def summarize(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_complexity(runs_root: Path) -> dict:
     comp = {}
-    for cpath in sorted(runs_root.glob("*/metrics/complexity.csv")):
+    paths = sorted(runs_root.glob("*/metrics/complexity.csv"))
+    global_comp = Path("results/metrics/complexity_all.csv")  # from profile_models.py
+    if global_comp.exists():
+        paths.append(global_comp)
+    for cpath in paths:
         for name, row in pd.read_csv(cpath, index_col=0).iterrows():
             comp.setdefault(name, row)
     return comp

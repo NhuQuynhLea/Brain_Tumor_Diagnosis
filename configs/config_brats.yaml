@@ -1,0 +1,62 @@
+# BraTS 2020 HGG/LGG glioma grading - 2D slice classification (Phase 10)
+
+project:
+  name: brain_tumor_mri_brats
+  seed: 42
+
+paths:
+  raw_data: data/external_raw/brats2020
+  processed_data: data/external/brats2020
+  results: results
+  runs: results/runs
+  figures: results/figures
+  logs: results/logs
+  metrics: results/metrics
+  checkpoints: models
+
+data:
+  classes: [hgg, lgg]
+  image_size: 224
+  num_channels: 3
+  split:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+
+preprocessing:
+  resize: [224, 224]
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+augmentation:
+  rotation_limit: 15
+  horizontal_flip_p: 0.5
+  scale_limit: 0.10
+  brightness_contrast_p: 0.3
+  brightness_limit: 0.15
+  contrast_limit: 0.15
+  elastic_p: 0.15
+  elastic_alpha: 30
+  elastic_sigma: 4
+
+model:
+  name: resnet50
+  pretrained: true
+  freeze_backbone: true
+  dropout: 0.5
+
+training:
+  batch_size: 32
+  num_workers: 0
+  epochs: 30
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: adamw
+  scheduler: cosine
+  use_class_weights: true     # ~4:1 HGG:LGG imbalance
+  early_stopping_patience: 7
+
+tracking:
+  backend: tensorboard
+  log_dir: results/logs

@@ -55,6 +55,8 @@ def main() -> None:
     p.add_argument("--run", default=None, help="With --skip-train: run to evaluate/compare")
     p.add_argument("--name", default=None, help="Label appended to the run id")
     p.add_argument("--split", default="test", choices=["val", "test"])
+    p.add_argument("--by-subject", action="store_true",
+                   help="Forward to evaluate.py: also write patient-level metrics")
     p.add_argument("--extra", nargs=argparse.REMAINDER, default=[],
                    help="Everything after --extra is forwarded to train.py (must be last)")
     args = p.parse_args()
@@ -88,12 +90,20 @@ def main() -> None:
             finish_run(run_dir, "failed")
             sys.exit(1)
 
-    if not run_step([py, str(scripts / "evaluate.py"), "--model", "all",
-                     "--split", args.split, "--run", str(run_dir)], "EVALUATE all"):
+    eval_cmd = [py, str(scripts / "evaluate.py"), "--model", "all",
+                "--split", args.split, "--run", str(run_dir)]
+    cmp_cmd = [py, str(scripts / "compare_models.py"), "--run", str(run_dir)]
+    if args.config:
+        eval_cmd += ["--config", args.config]
+        cmp_cmd += ["--config", args.config]
+    if args.by_subject:
+        eval_cmd += ["--by-subject"]
+
+    if not run_step(eval_cmd, "EVALUATE all"):
         if own_run: finish_run(run_dir, "failed")
         sys.exit(1)
 
-    if not run_step([py, str(scripts / "compare_models.py"), "--run", str(run_dir)], "COMPARE"):
+    if not run_step(cmp_cmd, "COMPARE"):
         if own_run: finish_run(run_dir, "failed")
         sys.exit(1)
 

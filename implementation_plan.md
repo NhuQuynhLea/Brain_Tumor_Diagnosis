@@ -99,16 +99,26 @@
 | 9.7 ⏳ | Training | Train MPAC-ResNet (from scratch) | `train.py --model mpac_resnet --no-pretrained --epochs 50` — with/without pretrain comparison | Trained model + logs | 1 day |
 | 9.8 ⏳ | Training | Train LS-Net (from scratch) | `train.py --model lsnet --no-pretrained --epochs 50` — no pretrained weights exist; establishes LS-Net baseline on our dataset | Trained model + logs | 1 day |
 | 9.9 ⏳ | Training | Train sub-1M Tiny variants | `train_all.py --models mpac_resnet_tiny resnet_tiny efficientnet_tiny mobilenet_tiny custom_cnn_tiny lsnet` — downscaling comparison per paper's paradigm | Tiny-variant results | 1.5 days |
-| 9.10 ⏳ | Training | Multi-seed runs for new models | Seeds 42/123/456 × all new models — stability analysis consistent with 5.15 | Mean ± std results | 1.5 days |
-| 9.11 ⏳ | Evaluation | Statistical + complexity analysis | McNemar: MPAC-ResNet vs ResNet50-FT and vs LS-Net; params/FLOPs/FPS table (paper Table-2 style); acc–efficiency scatter update | Updated comparison tables/figures | 1 day |
+| 9.10 ✅ | Training | Multi-seed runs for new models | **done: 3 seeds × resnet18, mpac_resnet, lsnet + all tinies** — resnet_tiny redesigned to paper config (4,3,2,1 → 975K) + `--patience 15` after (1,1,1,1) early-stopped at 80.9% | Mean ± std results | 1.5 days |
+| 9.11 ✅ | Evaluation | Statistical + complexity analysis | **done**: `scripts/mcnemar_pairs.py` (any pair, any run) + `scripts/profile_models.py` → `results/metrics/complexity_all.csv` (params/GFLOPs/GMACs/FPS); scatter updated via `paper_figures.py`. **LS-Net fastest new model: 88.5 FPS CPU, 179M MACs, 914K params** | Updated comparison tables/figures | 1 day |
 | 9.12 ⏳ | Evaluation | Downscaling analysis | Accuracy-drop curves across sub-1M variants (paper Fig-4 style) — which architecture degrades most gracefully in medical imaging | Downscaling figure | 0.5 day |
 | 9.13 ⏳ | Evaluation | Grad-CAM comparison | Do MPAC blocks attend to more clinically relevant regions than standard convs? MPAC-ResNet vs ResNet50-FT heatmaps | Grad-CAM comparison figure | 0.5 day |
 | 9.14 ⏳ | Evaluation | Cross-dataset eval of MPAC-ResNet | Evaluate on decontaminated Figshare subset (task 7.4b subset, ~250 imgs) | Generalization metrics | 0.5 day |
 | 9.15 ⏳ | Report | Paper integration | Update SOTA table (add LS-Net + new models), write "Proposed Method" (MPAC-ResNet) + "Downscaling Analysis" sections, update acc-efficiency figures, revise Introduction contributions | Paper sections | 2 days |
 | 9.16 ✅ | Model | Add resnet18 to registry | `src/models/resnet18.py` + `MODEL_REGISTRY["resnet18"]` — needed as ablation baseline (MPAC-ResNet = ResNet-18 + MPAC in stages 3-4) | `src/models/resnet18.py` | 0.25 day |
-| 9.17 ⏳ | Training | Ablation: what MPAC adds | ResNet-18-FT vs MPAC-ResNet-18-FT, identical recipe (lr 1e-4, 30 epochs, seeds 42/123/456) — isolates MPAC block contribution at fixed backbone | Ablation results | 1 day |
-| 9.18 ⏳ | Evaluation | Reference/efficiency trade-off | Rerun MPAC-ResNet-FT at lr 1e-4 (matches ResNet50-FT recipe) → acc vs params/FLOPs/FPS comparison (extends 9.11) | Trade-off table | 0.5 day |
-| 9.19 ⏳ | Evaluation | Hybrid vs pure MPAC | MPAC-ResNet vs LS-Net head-to-head: McNemar test + 3-seed mean±std — does residual-hybrid beat pure-MPAC? | Significance results | 0.5 day |
+| 9.17 ✅ | Training | Ablation: what MPAC adds | **done**: ResNet18-FT 98.70±0.47 vs MPAC-ResNet-FT 98.10±0.44 (3 seeds, lr 1e-4). MPAC ≈ −0.6pp in full-size regime (not significant at s123/s456, sig-worse at s42 p=4.8e-4) | Ablation results | 1 day |
+| 9.18 ✅ | Evaluation | Reference/efficiency trade-off | **done**: MPAC-ResNet-FT @1e-4 all seeds (98.10±0.44). vs ResNet50-FT 99.11±0.13: −1.0pp acc for **12.6× fewer params** (1.86M vs 23.5M), 51.3 vs 14.7 FPS | Trade-off table | 0.5 day |
+| 9.19 ✅ | Evaluation | Hybrid vs pure MPAC | **done**: MPAC-ResNet vs LS-Net McNemar ×3 seeds — s42 p=0.118 ns, s123 p=2.98e-4 (MPAC sig-better), s456 p=1.0 ns → **inconclusive, within noise** | Significance results | 0.5 day |
+| **Phase 10** | **BraTS Generalization — HGG/LGG Glioma Grading** (2D slice classification; replaces invalidated Figshare story of 7.4 — BraTS has zero provenance overlap) | | | | |
+| 10.1 | Data | Acquire BraTS 2020 | Kaggle `awsaf49/brats20-dataset-training-validation` — 369 cases (293 HGG / 76 LGG), 4 modalities + seg masks; `name_mapping.csv` → Grade. BraTS 2020 chosen: last version with HGG/LGG labels (2021+ = segmentation only) | Raw dataset | 0.5 day |
+| 10.2 | Data | NIfTI → 2D-slice extraction | `scripts/prepare_brats.py` — nibabel; z-score within brain mask → uint8; seg-guided axial slice selection (≥ min-tumor-px, top-K cap per subject so HGG's larger tumors don't amplify the 4:1 imbalance); modalities [flair,t1ce,t2] stacked as RGB PNG — zero model changes; `--modalities flair` for ablation | script + PNGs | 1 day |
+| 10.3 | Data | Subject-level split | `grouped_stratified_split` in `src/data/split.py` — split patients 70/15/15 stratified by grade BEFORE expanding to slices (slice-level split leaks patient identity → inflated metrics); manifests `data/external/brats2020/{all,train,val,test}.csv` keep `subject` column | split fn + CSVs | 0.5 day |
+| 10.4 | Config | BraTS config + eval plumbing | `configs/config_brats.yaml` (classes [hgg,lgg], use_class_weights: true for 4:1 imbalance, processed_data → data/external/brats2020); add `--config` to `evaluate.py`/`compare_models.py`; `--by-subject` in evaluate.py → patient-level metrics from `subject` column (mean-prob vote) | config + small edits | 0.25 day |
+| 10.5 | Training | Full zoo on BraTS | `run_all.py --config configs/config_brats.yaml` — all 13 models, frozen + fine-tune, same recipe as Phase 5/9 (dataset, Trainer, models, Grad-CAM all unchanged — only manifests differ) | Trained models + logs | 1.5 days |
+| 10.6 | Training | Multi-seed BraTS | Seeds 42/123/456 for top models — LGG test ≈11 patients → high variance, mean±std mandatory (matches 5.15 protocol) | Mean ± std results | 1 day |
+| 10.7 | Evaluation | Modality ablation | [flair,t1ce,t2] stack vs FLAIR-only (second manifest dir `data/external/brats2020_flair` + second config) — quantifies multi-modal contribution | Ablation table | 0.5 day |
+| 10.8 | Evaluation | MPAC ablation on new domain | resnet18 vs mpac_resnet on BraTS — extends 9.17's MPAC-contribution isolation to a second dataset/domain | Ablation results | 0.5 day |
+| 10.9 | Report | Generalization write-up | Cross-dataset table (Nickparvar vs BraTS): which architectures/compact models transfer best; subject-level vs slice-level metrics; replaces the invalidated 7.4 section | Paper section | 0.5 day |
 
 ---
 
@@ -125,7 +135,8 @@
 | 7. Cross-dataset Generalization | 6 tasks | 4 days |
 | 8. Documentation | 8 tasks | 11 days |
 | 9. LS-Net / MPAC Integration | 19 tasks | ~16 days |
-| **Total** | **86 tasks** | **~76 days** |
+| 10. BraTS Generalization (HGG/LGG) | 9 tasks | ~7 days |
+| **Total** | **95 tasks** | **~83 days** |
 
 > [!TIP]
 > Phases 1-2 can be partially parallelized. Phases 4-5 are the heaviest compute workload — ensure GPU access (Google Colab Pro, Kaggle, or local GPU).

@@ -52,9 +52,10 @@ def mcnemar_test(correct_a: np.ndarray, correct_b: np.ndarray) -> dict:
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--run", default=None, help="run_id, run name, or path (default: latest run)")
+    p.add_argument("--config", default=None, help="Path to YAML config (default: configs/config.yaml)")
     args = p.parse_args()
 
-    cfg = load_config()
+    cfg = load_config(args.config)
     run_dir = use_run(cfg, resolve_run(cfg, args.run))
     add_log_file(logger, run_dir / "logs" / "compare.log")
     logger.info("Run dir: %s", run_dir)

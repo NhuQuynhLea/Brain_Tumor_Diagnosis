@@ -74,7 +74,8 @@ def gradcam_grid(model, dataset, label_names, device, out_path, n=8) -> None:
 
 def evaluate_one(cfg, name: str, ckpt: Path, manifest: Path, eval_name: str,
                  max_samples: int | None, device, skip_gradcam: bool,
-                 restrict_classes: bool, run_id: str = "") -> dict:
+                 restrict_classes: bool, run_id: str = "",
+                 by_subject: bool = False) -> dict:
     logger.info("Evaluating %s from %s on %s (%s)", name, ckpt, manifest, device)
     ext = "" if eval_name in ("train", "val", "test") else f"_{eval_name}"
 
@@ -118,6 +119,7 @@ def evaluate_one(cfg, name: str, ckpt: Path, manifest: Path, eval_name: str,
 
     # per-sample predictions (for error analysis + McNemar)
     pred_df = dataset.df.copy()
+    pred_df["y_true"] = y_true
     pred_df["y_pred"] = y_pred
     pred_df["pred_label"] = [classes[i] for i in y_pred]
     pred_df["correct"] = (y_pred == y_true)
@@ -129,6 +131,16 @@ def evaluate_one(cfg, name: str, ckpt: Path, manifest: Path, eval_name: str,
     errors.to_csv(out_metrics / f"{name}{ext}_errors.csv", index=False)
     logger.info("Misclassified: %d / %d (%.1f%%)", len(errors), len(pred_df),
                 100 * len(errors) / len(pred_df))
+
+    if by_subject and "subject" in pred_df.columns:
+        g = pred_df.groupby("subject")
+        s_true = g["y_true"].first().to_numpy()
+        s_prob = g[[f"prob_{c}" for c in classes]].mean().to_numpy()
+        s_metrics = compute_metrics(s_true, s_prob.argmax(1), classes)
+        with open(out_metrics / f"{name}{ext}_subject_metrics.json", "w") as f:
+            json.dump(s_metrics, f, indent=2)
+        logger.info("Subject-level (n=%d): acc=%.4f f1=%.4f",
+                    len(s_true), s_metrics["accuracy"], s_metrics["f1_macro"])
 
     # figures
     plot_confusion_matrix(y_true, y_pred, classes,
@@ -160,6 +172,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--model", required=True,
                    help="Model name, comma-separated list, or 'all' (every models/*/best.pt)")
+    p.add_argument("--config", default=None, help="Path to YAML config (default: configs/config.yaml)")
     p.add_argument("--checkpoint", default=None, help="Default: <run>/models/<model>/best.pt")
     p.add_argument("--run", default=None, help="run_id, run name, or path (default: latest run)")
     p.add_argument("--split", default="test", choices=["train", "val", "test"])
@@ -169,9 +182,11 @@ def main() -> None:
                    help="Drop model classes absent from the eval set before metrics")
     p.add_argument("--max-samples", type=int, default=None)
     p.add_argument("--skip-gradcam", action="store_true")
+    p.add_argument("--by-subject", action="store_true",
+                   help="If manifest has a 'subject' column, also write patient-level metrics")
     args = p.parse_args()
 
-    cfg = load_config()
+    cfg = load_config(args.config)
     run_dir = use_run(cfg, resolve_run(cfg, args.run))
     add_log_file(logger, run_dir / "logs" / "evaluate.log")
     logger.info("Run dir: %s", run_dir)
@@ -202,7 +217,8 @@ def main() -> None:
             continue
         summary[name] = evaluate_one(cfg, name, ckpt, manifest, eval_name,
                                      args.max_samples, device, args.skip_gradcam,
-                                     args.restrict_classes, run_dir.name)
+                                     args.restrict_classes, run_dir.name,
+                                     by_subject=args.by_subject)
         torch.cuda.empty_cache() if device.type == "cuda" else None
 
     if len(summary) > 1:

@@ -23,6 +23,23 @@ def stratified_split(df: pd.DataFrame, cfg) -> dict[str, pd.DataFrame]:
     return {"train": train_df, "val": val_df, "test": test_df}
 
 
+def grouped_stratified_split(df: pd.DataFrame, cfg, group_col: str = "subject") -> dict[str, pd.DataFrame]:
+    """Same stratified ratios, but split by group (patient) so no subject spans two splits."""
+    seed = cfg.project.seed
+    ratios = cfg.data.split
+    subjects = df[[group_col, "label"]].drop_duplicates(group_col)
+    train_s, rem_s = train_test_split(
+        subjects, test_size=ratios.val + ratios.test,
+        stratify=subjects["label"], random_state=seed)
+    val_s, test_s = train_test_split(
+        rem_s, test_size=ratios.test / (ratios.val + ratios.test),
+        stratify=rem_s["label"], random_state=seed)
+    return {
+        name: df[df[group_col].isin(s[group_col])].reset_index(drop=True)
+        for name, s in (("train", train_s), ("val", val_s), ("test", test_s))
+    }
+
+
 def write_manifests(splits: dict[str, pd.DataFrame], classes: list[str], out_dir: Path) -> None:
     """Add label_idx column and write one CSV per split."""
     out_dir.mkdir(parents=True, exist_ok=True)
