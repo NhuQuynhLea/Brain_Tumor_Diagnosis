@@ -45,6 +45,7 @@ def variant_of(row) -> str:
 def load_eval_rows(exp_path: Path, runs_root: Path) -> pd.DataFrame:
     exp = pd.read_csv(exp_path)
     df = exp[(exp["source"] == "evaluate") & (exp["split"] == "test")].copy()
+    df = df.drop_duplicates(["run_id", "model", "source", "split"], keep="last")
     df["variant"] = df.apply(variant_of, axis=1)
     df["metrics_json"] = df.apply(
         lambda r: runs_root / str(r["run_id"]) / "metrics" / f"{r['model']}_test_metrics.json",

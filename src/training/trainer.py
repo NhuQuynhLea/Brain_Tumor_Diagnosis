@@ -1,5 +1,6 @@
 """Training loop: train/validate epochs, early stopping, checkpointing, tracking."""
 
+import csv
 import time
 from pathlib import Path
 
@@ -45,6 +46,8 @@ class Trainer:
         self.logger = get_logger(f"trainer.{self.run_name}",
                                  Path(cfg.paths.logs) / f"train_{self.run_name}.log")
         self.ckpt_dir = Path(cfg.paths.checkpoints) / self.run_name
+        self.epochs_dir = self.ckpt_dir / "epochs"
+        self.save_epochs = bool(cfg.training.get("save_epoch_checkpoints", True))
         self.max_batches = int(cfg.training.get("debug_batches", 0)) or None
 
         monitor = cfg.training.get("monitor", "val_f1_macro")
@@ -110,6 +113,9 @@ class Trainer:
         ckpt = load_checkpoint(path, self.model, self.optimizer, self.scheduler, self.device)
         self.start_epoch = ckpt["epoch"] + 1
         self.best = ckpt["metrics"].get(self.monitor, self.best)
+        hist_path = self.ckpt_dir / "history.csv"
+        if hist_path.exists():
+            self.history = pd.read_csv(hist_path).to_dict("records")
         self.logger.info("Resumed from %s at epoch %d", path, self.start_epoch)
 
     # ---- main ----
@@ -152,6 +158,10 @@ class Trainer:
             state = {**row, **{f"val_{k}": v for k, v in va.items() if not k.startswith("val_")}}
             save_checkpoint(self.ckpt_dir / "last.pt", self.model, self.optimizer,
                             self.scheduler, epoch, state, dict(self.cfg))
+            if self.save_epochs:
+                save_checkpoint(self.epochs_dir / f"epoch_{epoch:03d}.pt", self.model,
+                                None, None, epoch, state, dict(self.cfg))
+            self._append_history_row(row)
             if self._is_better(va[self.monitor.removeprefix("val_")]):
                 self.best = va[self.monitor.removeprefix("val_")]
                 self.epochs_no_improve = 0
@@ -168,3 +178,14 @@ class Trainer:
         history.to_csv(self.ckpt_dir / "history.csv", index=False)
         self.logger.info("Done. Best %s=%.4f", self.monitor, self.best)
         return history
+
+    def _append_history_row(self, row: dict) -> None:
+        """Append one epoch row to history.csv so it survives a crash."""
+        self.ckpt_dir.mkdir(parents=True, exist_ok=True)
+        path = self.ckpt_dir / "history.csv"
+        write_header = not path.exists()
+        with open(path, "a", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(row.keys()))
+            if write_header:
+                w.writeheader()
+            w.writerow(row)

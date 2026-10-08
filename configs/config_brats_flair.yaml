@@ -1,12 +1,13 @@
-# BraTS 2020 HGG/LGG glioma grading - 2D slice classification (Phase 10)
+# BraTS 2020 HGG/LGG - FLAIR-only ablation variant (Phase 10.7)
+# Same as config_brats.yaml but points at the single-modality manifests.
 
 project:
-  name: brain_tumor_mri_brats
+  name: brain_tumor_mri_brats_flair
   seed: 42
 
 paths:
-  raw_data: data/external_raw/brats2020
-  processed_data: data/external/brats2020
+  raw_data: data/external_raw/brats2020_flair
+  processed_data: data/external/brats2020_flair
   results: results
   runs: results/runs
   figures: results/figures
@@ -54,7 +55,7 @@ training:
   weight_decay: 0.0001
   optimizer: adamw
   scheduler: cosine
-  use_class_weights: true     # ~4:1 HGG:LGG imbalance
+  use_class_weights: true
   early_stopping_patience: 7
   save_epoch_checkpoints: true  # keep weights-only epochs/epoch_NNN.pt for checkpoint sweeps
 

@@ -60,6 +60,7 @@ training:
   scheduler: cosine           # cosine | step | plateau
   use_class_weights: false    # dataset is ~balanced after cleaning
   early_stopping_patience: 7
+  save_epoch_checkpoints: true  # keep weights-only epochs/epoch_NNN.pt for checkpoint sweeps
 
 tracking:
   backend: tensorboard        # tensorboard | wandb

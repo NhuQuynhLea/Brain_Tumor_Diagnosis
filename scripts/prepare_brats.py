@@ -20,13 +20,16 @@ MODALITIES = ("flair", "t1", "t1ce", "t1n", "t2")
 
 
 def load_grades(src: Path) -> dict:
-    hits = list(src.rglob("*name_mapping*.csv"))
-    if not hits:
-        raise SystemExit(f"name_mapping.csv not found under {src}")
-    df = pd.read_csv(hits[0])
-    id_col = next((c for c in df.columns if "subject_id" in c.lower()), df.columns[0])
-    grade_col = next(c for c in df.columns if c.strip().lower() == "grade")
-    return {str(r[id_col]): str(r[grade_col]).strip().lower() for _, r in df.iterrows()}
+    for f in src.rglob("*mapping*.csv"):
+        df = pd.read_csv(f)
+        grade_col = next((c for c in df.columns if c.strip().lower() == "grade"), None)
+        if grade_col is None:
+            continue
+        id_col = (next((c for c in df.columns if     "2020" in c and "id" in c.lower()), None)
+                  or next((c for c in df.columns if "id" in c.lower()), df.columns[0]))
+        out = {str(r[id_col]): str(r[grade_col]).strip().lower() for _, r in df.iterrows()}
+        return {k: v for k, v in out.items() if v in ("hgg", "lgg")}
+    raise SystemExit(f"No mapping CSV with a Grade column under {src}")
 
 
 def norm_volume(vol: np.ndarray) -> np.ndarray:
