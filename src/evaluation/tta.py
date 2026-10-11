@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import torch
 from albumentations.pytorch import ToTensorV2
+from tqdm import tqdm
 
 
 def build_tta_views(cfg) -> list[tuple[str, A.Compose]]:
@@ -49,7 +50,7 @@ def build_tta_views(cfg) -> list[tuple[str, A.Compose]]:
 def load_raw_images(df: pd.DataFrame) -> list[np.ndarray]:
     """Read manifest filepaths -> list of (H, W, 3) uint8 RGB (shapes may vary)."""
     imgs = []
-    for fp in df["filepath"]:
+    for fp in tqdm(df["filepath"], desc="Loading images", unit="img"):
         img = cv2.imread(str(fp), cv2.IMREAD_COLOR)
         if img is None:
             raise IOError(f"Could not read image: {fp}")
@@ -58,42 +59,97 @@ def load_raw_images(df: pd.DataFrame) -> list[np.ndarray]:
 
 
 @torch.no_grad()
-def forward_views(model: torch.nn.Module, imgs_rgb: np.ndarray,
+def forward_views(model: torch.nn.Module, imgs_rgb: list[np.ndarray],
                   views: list[tuple[str, A.Compose]], device,
-                  batch_size: int = 32) -> np.ndarray:
+                  batch_size: int = 32, desc: str = "Inference") -> np.ndarray:
     """Run every view on every image. Returns probs (N, K, C)."""
     model.eval()
     n = len(imgs_rgb)
     probs = None
-    for vi, (_, tf) in enumerate(views):
+    pbar = tqdm(total=len(views) * -(-n // batch_size), desc=desc, unit="batch")
+    for vi, (vname, tf) in enumerate(views):
+        pbar.set_postfix(view=vname)
         for i in range(0, n, batch_size):
             x = torch.stack([tf(image=im)["image"] for im in imgs_rgb[i:i + batch_size]])
             p = torch.softmax(model(x.to(device)), dim=1).cpu().numpy()
             if probs is None:
                 probs = np.zeros((n, len(views), p.shape[1]))
             probs[i:i + batch_size, vi] = p
+            pbar.update(1)
+    pbar.close()
     return probs
 
 
-def gate_and_aggregate(probs_views: np.ndarray, df: pd.DataFrame,
-                       tau: float, mode: str = "selective"):
-    """Merge view probs under a confidence gate.
+STRATEGY_NAMES = ("conf", "subject", "weakclass", "disagree", "scalempac")
 
-    probs_views: (N, K, C). Returns (final_probs (N, C), trigger mask (N, bool)).
-    For 'full', every row merges; tau is ignored.
-    """
-    p0 = probs_views[:, 0, :]
-    k = probs_views.shape[1]
-    merged = probs_views.mean(axis=1)
+
+def union_trigger(p0: np.ndarray, df: pd.DataFrame, taus: list[float],
+                  weak_idx: int | None = None) -> np.ndarray:
+    """Rows that ANY selective strategy could enter at ANY tau in the sweep,
+    so a single views pass on this subset serves every simulation."""
     conf = p0.max(1)
-    if mode == "selective":
-        trigger = conf < tau
-    elif mode == "subject":
+    pred = p0.argmax(1)
+    m = conf < max(taus)
+    if weak_idx is not None:
+        m |= pred == weak_idx
+    if "subject" in df.columns:
+        sc = pd.Series(conf).groupby(df["subject"].to_numpy()).transform("mean")
+        m |= (sc < max(taus)).to_numpy()
+    return np.where(m)[0]
+
+
+def simulate_strategy(probs_T: np.ndarray, idx_T: np.ndarray, p0: np.ndarray,
+                      df: pd.DataFrame, tau: float, strategy: str,
+                      view_names: list[str], weak_idx: int | None = None):
+    """Replay one strategy's gate/escalation on cached per-row view probs.
+
+    probs_T: (T, K, C) probs for rows idx_T (view 0 = identity).
+    Returns (probs (N, C), trigger mask (N,), n_extra_forwards, n_escalated).
+    """
+    n, _ = p0.shape
+    k = probs_T.shape[1]
+    conf = p0.max(1)
+    pred = p0.argmax(1)
+    in_T = np.zeros(n, bool)
+    in_T[idx_T] = True
+    t_of_row = -np.ones(n, dtype=int)
+    t_of_row[idx_T] = np.arange(len(idx_T))
+
+    if strategy == "subject" and "subject" in df.columns:
         subj_conf = pd.Series(conf).groupby(df["subject"].to_numpy()).transform("mean")
-        trigger = (subj_conf < tau).to_numpy()
-    else:  # full
-        trigger = np.ones(len(p0), dtype=bool)
-    return np.where(trigger[:, None], merged, p0), trigger
+        entry = (subj_conf < tau).to_numpy()
+    elif strategy == "weakclass":
+        entry = (conf < tau) | (pred == weak_idx)
+    else:  # conf, disagree, scalempac share the confidence entry gate
+        entry = conf < tau
+    entry &= in_T
+    rows = np.where(entry)[0]
+    tt = t_of_row[rows]
+
+    probs = p0.copy()
+    n_escalated = 0
+    if strategy in ("conf", "subject", "weakclass"):
+        probs[rows] = probs_T[tt].mean(axis=1)
+        extra = len(rows) * (k - 1)
+    elif strategy == "disagree":
+        probe = view_names.index("hflip")
+        esc = probs_T[tt, probe].argmax(1) != pred[rows]
+        probs[rows[~esc]] = probs_T[tt[~esc]][:, [0, probe]].mean(axis=1)
+        probs[rows[esc]] = probs_T[tt[esc]].mean(axis=1)
+        extra = len(rows) + esc.sum() * (k - 2)
+        n_escalated = int(esc.sum())
+    elif strategy == "scalempac":
+        probes = [i for i, v in enumerate(view_names) if v.startswith("scale")]
+        votes = np.stack([probs_T[tt, v].argmax(1) for v in [0] + probes], axis=1)
+        esc = (votes != pred[rows][:, None]).any(1) | (votes[:, 1:] != votes[:, :1]).any(1)
+        used = [0] + probes
+        probs[rows[~esc]] = probs_T[tt[~esc]][:, used].mean(axis=1)
+        probs[rows[esc]] = probs_T[tt[esc]].mean(axis=1)
+        extra = len(rows) * len(probes) + esc.sum() * (k - 1 - len(probes))
+        n_escalated = int(esc.sum())
+    else:
+        raise ValueError(f"unknown strategy '{strategy}'")
+    return probs, entry, int(extra), n_escalated
 
 
 def run_tta_eval(model, df: pd.DataFrame, cfg, device, mode: str = "selective",
@@ -109,7 +165,8 @@ def run_tta_eval(model, df: pd.DataFrame, cfg, device, mode: str = "selective",
     t0 = time.perf_counter()
     imgs = load_raw_images(df)
     t_load = time.perf_counter()
-    probs0 = forward_views(model, imgs, views[:1], device, batch_size)[:, 0]
+    probs0 = forward_views(model, imgs, views[:1], device, batch_size,
+                           desc="Pass 1 (plain)")[:, 0]
     if device.type == "cuda":
         torch.cuda.synchronize()
     t1 = time.perf_counter()
@@ -129,7 +186,8 @@ def run_tta_eval(model, df: pd.DataFrame, cfg, device, mode: str = "selective",
         t2 = time.perf_counter()
         if len(idx):
             vprobs = forward_views(model, [imgs[i] for i in idx], views[1:],
-                                   device, batch_size)
+                                   device, batch_size,
+                                   desc=f"TTA pass ({len(idx)} triggered)")
             if device.type == "cuda":
                 torch.cuda.synchronize()
             probs[idx] = (probs0[idx] + vprobs.sum(axis=1)) / len(views)
@@ -165,7 +223,8 @@ def compute_view_probs(model, df: pd.DataFrame, cfg, device,
     views = build_tta_views(cfg)[:max(1, n_views)]
     t0 = time.perf_counter()
     imgs = load_raw_images(df)
-    probs = forward_views(model, imgs, views, device, batch_size)
+    probs = forward_views(model, imgs, views, device, batch_size,
+                          desc="All views")
     if device.type == "cuda":
         torch.cuda.synchronize()
     return probs, df, time.perf_counter() - t0
