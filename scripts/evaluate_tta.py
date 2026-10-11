@@ -166,8 +166,14 @@ def main() -> None:
     manifest = Path(args.csv) if args.csv else Path(cfg.paths.processed_data) / f"{args.split}.csv"
     eval_name = f"{manifest.parent.name}_{manifest.stem}" if args.csv else args.split
     df = pd.read_csv(manifest)
-    if args.max_samples:
-        df = df.head(args.max_samples)
+    if args.max_samples and len(df) > args.max_samples:
+        # stratified subsample (keeps class ratio + subject diversity); head()
+        # would pick ~4 subjects of a single class and break subject metrics
+        parts = []
+        for _, g in df.groupby("label_idx"):
+            n = max(1, round(len(g) * args.max_samples / len(df)))
+            parts.append(g.sample(n=n, random_state=cfg.project.seed))
+        df = pd.concat(parts).sort_index()
     if args.tta == "subject" and "subject" not in df.columns:
         raise SystemExit("--tta subject requires a 'subject' column in the manifest")
     logger.info("Manifest %s -> %d samples (%s)", manifest, len(df), eval_name)
