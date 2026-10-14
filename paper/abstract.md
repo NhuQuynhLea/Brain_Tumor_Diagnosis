@@ -37,7 +37,7 @@ Below are the **5 publication-ready tables** required to substantiate every clai
 
 > **Purpose**: Demonstrates that the benchmark saturation breaks on multi-sequence MRI grading (~4:1 class imbalance, 1,400 slices / 56 subjects), revealing the generalization drop in compact architectures and proving where MCG-TTA closes the gap.
 
-| Model                        | Parameters      | Slice F1 (%)            | Slice Acc (%)           | Slice AUC (%)           | Patient F1 (%)          | Patient Acc (%) | LGG Patient Recall (Caught / 12) |
+| Model                        | Parameters      | Slice F1 (%)            | Slice Acc (%)           | Slice AUC (%)           | Patient F1 (%)          | Patient Acc (%) | LGG Patient Recall Mean [%] (Cases / 12) |
 | ---------------------------- | --------------- | ----------------------- | ----------------------- | ----------------------- | ----------------------- | --------------- | -------------------------------- |
 | **VGG-16**             | 27.56M          | **89.31 ± 0.06** | **92.57 ± 0.10** | **96.25 ± 0.93** | **92.34 ± 3.33** | **94.64** | **11.0 / 12 (91.7%)**      |
 | **ResNet-50**          | 23.52M          | 84.76 ± 0.86           | 89.65 ± 1.21           | 94.85 ± 0.54           | 87.91 ± 1.10           | 91.96           | 9.5 / 12 (79.2%)                 |
@@ -56,13 +56,11 @@ Below are the **5 publication-ready tables** required to substantiate every clai
 
 > **Purpose**: Validates the core contribution in the abstract: why architecture-informed **MCG-TTA** (multi-scale consistency gating) is superior to unselective TTA and naive confidence gating in both accuracy recovery and clinical safety.
 
-| Strategy                     | Description / Gating Rule                                                                   | Trigger Rate (%) | Extra Forwards / Trigger | Modelled Latency (ms) | Relative Latency | Slice F1 (s42 / s123)   | Mean Slice F1 (%) | Mean Patient F1 (%) | LGG Patient Recall            |
-| ---------------------------- | ------------------------------------------------------------------------------------------- | ---------------- | ------------------------ | --------------------- | ---------------- | ----------------------- | ----------------- | ------------------- | ----------------------------- |
-| **LS-Net (Base)**      | Single standard forward pass                                                                | 0.0%             | 0                        | **5.60**        | **1.0×**  | 83.69 / 80.35           | 82.02             | **89.34**     | 20 / 24                       |
-|                              |                                                                                             |                  |                          |                       |                  |                         |                   |                     |                               |
-| **MCG-TTA (proposed)** | **$p_{\max} < \tau \to$ scale $\pm 10\%$ probes; escalate on scale disagreement** | **27.6%**  | **3.3**            | **10.74**       | **1.92×** | **85.52 / 81.38** | **83.45**   | **88.15**     | **20 / 24 (preserved)** |
-|                              |                                                                                             |                  |                          |                       |                  |                         |                   |                     |                               |
-| *Full TTA (Ceiling)*       | Unconditional 6-view TTA on all samples                                                     | 100.0%           | 5.0                      | 33.60                 | 6.00×           | 85.44 / —              | —                | 87.13               | 19 / 24                       |
+| Strategy                     | Description / Gating Rule                                                                   | Trigger Rate (%) | Extra Passes / Trigger | Modelled Latency (ms) | Relative Latency | Slice F1 (%) | Mean Patient F1 (%) | LGG Patient Recall Mean [%] (Cases / 12) |
+| ---------------------------- | ------------------------------------------------------------------------------------------- | ---------------- | ------------------------ | --------------------- | ---------------- | ------------ | ------------------- | ---------------------------------------- |
+| **LS-Net (Base)**      | Single standard forward pass                                                                | 0.0%             | 0                        | **5.60**        | **1.00×**        | 82.02        | **89.33**           | **83.3% (10.0 / 12)**                    |
+| **MCG-TTA (proposed)** | **{\\max} < \\tau \\to$ scale $\\pm 10\\%$ probes; escalate on scale disagreement**           | **27.6%**        | **3.3**                  | **10.74**       | **1.92×**        | **83.45**    | 88.15               | **83.3% (10.0 / 12)**                    |
+| *Full TTA (Ceiling)*       | Unconditional 6-view TTA on all samples                                                     | 100.0%           | 5.0                      | 33.60                 | 6.00×            | 85.44        | 87.13               | 79.2% (9.5 / 12)                         |
 
 ### Table 4: Edge Hardware Profiling & Computational Complexity
 

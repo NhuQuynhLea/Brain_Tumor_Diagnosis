@@ -1,11 +1,11 @@
-\section{Methodology: Uncertainty-Gated Multi-Scale Inference (MCG-TTA)}
+\section{Methodology}
 \label{sec:methodology}
 
-Motivated by the computational and latency constraints of clinical edge devices \cite{9, 20, 21}, and the observation that compact convolutional architectures relying on parallel dilated convolutions can exhibit sensitivity to input scale variations \cite{5, 16}, this work introduces \textbf{Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}. The underlying hypothesis is that scale-induced ambiguity in compact multi-dilation models concentrates in low-confidence predictions, and that these predictions can be dynamically stabilized at inference time by probing the model with multi-scale views aligned with its internal dilation structure---requiring zero additional learned parameters.
+Motivated by the compute and latency constraints of edge devices \cite{9, 20, 21}, and the observation that compact models relying on parallel dilated convolutions can exhibit sensitivity to input scale variations \cite{5, 16}, this work introduces Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA). The underlying hypothesis is that scale-induced ambiguity in compact multi-dilation architectures concentrates in low-confidence predictions, and that these predictions can be stabilized at inference time by probing the model with multi-scale views aligned with its internal dilation structure, requiring no additional learned parameters.
 
-In this section, we formulate the general image classification problem and base model representation, analyze the theoretical scale sensitivity of compact atrous convolutions, present the formal algorithmic pipeline of MCG-TTA across its three decision stages, derive an analytical edge latency model, and define the volumetric patient-level diagnostic aggregation.
+In this section, we formulate the image classification problem, analyze the spatial scale sensitivity of compact atrous convolutions, present the algorithmic stages of MCG-TTA, derive an analytical latency model, and define the patient-level volumetric diagnostic aggregation.
 
-\subsection{Problem Formulation and Base Network Representation}
+\subsection{Problem Formulation and Base Network Architecture}
 
 Let $\mathbf{I} \in \mathbb{R}^{H \times W \times C}$ denote a 2D brain MRI slice, where $H, W$ represent spatial dimensions and $C$ denotes channel dimensionality. A deep neural network $f_\theta$ parameterized by learned weights $\theta$ maps the input slice to a vector of logits $\mathbf{z} = f_\theta(\mathbf{I}) \in \mathbb{R}^K$ over $K$ mutually exclusive diagnostic categories. 
 
@@ -24,30 +24,30 @@ To support execution on resource-constrained hardware, we adopt a compact multi-
 
 \begin{figure*}[t]
 \centering\includegraphics[width=0.88\textwidth]{figures/lsnet_architecture.pdf}
-\caption{LS-Net backbone topology. The strided stem and four residual multi-path atrous convolution (MPAC) stages reduce spatial dimensions while progressively doubling channel representations. The parallel depthwise branches ($d=1, 2$) capture multi-scale spatial receptive fields without parameter inflation, fused via pointwise $1\times1$ projections and residual connections.}\label{fig:lsnet-architecture}
+\caption{Architecture of the compact LiteSpeed-Net (LS-Net) backbone and MPAC residual block.}\label{fig:lsnet-architecture}
 \end{figure*}
 
-\subsection{Scale Sensitivity in Compact Multi-Dilation Convolutions}
+\subsection{Spatial Scale Sensitivity in Compact Atrous Convolutions}
 
-While atrous convolutions provide an efficient mechanism for expanding the receptive field without downsampling feature resolutions \cite{5}, their discrete sampling mechanics introduce a distinct structural vulnerability under input distribution shifts.
+While atrous convolutions expand the receptive field without downsampling spatial resolution \cite{5}, their discrete sampling mechanics introduce structural sensitivity under input distribution shifts.
 
-An atrous convolution with dilation rate $d > 1$ samples input features on a sparse regular lattice with stride $d$. In deep, overparameterized architectures, the resulting sparse sampling artifacts---often referred to as the \emph{gridding effect} \cite{5}---are mitigated by dozens of subsequent parameterized layers that continuously blend feature maps across deep residual stages. In contrast, compact vision models designed for low-power edge environments \cite{16} possess limited parameter depth, restricting their capacity to interpolate across discrete spatial sampling gaps.
+An atrous convolution with dilation rate $d > 1$ samples input features on a sparse regular lattice with stride $d$. In deep, overparameterized architectures, the resulting sparse sampling artifacts, commonly termed the \emph{gridding effect} \cite{5}, are mitigated by dozens of subsequent parameterized layers that continuously blend feature maps across deep residual stages. In contrast, compact vision models designed for low-power edge environments \cite{16} possess limited parameter depth, restricting their capacity to interpolate across discrete spatial sampling gaps.
 
-When deployed across clinical environments with differing acquisition settings---such as variations in slice thickness, scanner geometry, or lesion physical dimensions---pathological margins undergo spatial scale shifts relative to the training distribution. Consequently, fixed dilated sampling points can misalign with fine anatomical boundaries, such as thin infiltrative borders or micro-structural margins \cite{5, 16}.
+When deployed across clinical environments with differing acquisition settings (such as variations in slice thickness, scanner geometry, or lesion dimensions), pathological margins undergo spatial scale shifts relative to the training distribution. Consequently, fixed dilated sampling points can misalign with fine anatomical boundaries, such as thin infiltrative borders or micro-structural margins \cite{5, 16}.
 
 Based on these observations, we formulate two design principles:
 \begin{enumerate}
-\item \textbf{Uncertainty Concentration}: Spatial sampling instability manifests primarily in predictions exhibiting high predictive uncertainty ($p_{\max} < \tau$, where $\tau$ denotes an empirical confidence threshold).
-\item \textbf{Architecture-Informed Scale Probing}: Because this instability stems from discrete spatial sampling intervals, uncertain predictions can be probed and stabilized at test time by applying targeted scale perturbations that mirror the internal dilation offsets of the architecture, without altering the model's learned parameters.
+\item \emph{Uncertainty Concentration}: Spatial scale sensitivity manifests primarily in predictions exhibiting high predictive uncertainty ($p_{\max} < \tau$, where $\tau$ denotes an empirical confidence threshold).
+\item \emph{Architecture-Informed Scale Probing}: Because this sensitivity stems from discrete spatial sampling intervals, uncertain predictions can be probed and stabilized at test time by applying targeted scale perturbations that mirror the internal dilation offsets of the architecture, without altering the model's learned parameters.
 \end{enumerate}
 
-\subsection{Proposed Method: Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}
+\subsection{Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}
 
-To improve inference robustness while strictly bounding computational overhead, we formulate \textbf{Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}. Rather than applying test-time augmentation unconditionally across all inputs---which scales inference latency linearly with the number of views \cite{42}---MCG-TTA dynamically routes samples through a three-stage decision pipeline, as depicted in Fig.~\ref{fig:mcg-tta}.
+To improve inference robustness while strictly bounding computational overhead, we formulate Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA). Instead of applying test-time augmentation unconditionally across all inputs, which scales inference latency linearly with the number of views \cite{42}, MCG-TTA dynamically routes samples through a three-stage decision pipeline, as depicted in Fig.~\ref{fig:mcg-tta}.
 
 \begin{figure*}[t]
 \centering\includegraphics[width=0.85\textwidth]{figures/mcg_tta.pdf}
-\caption{Decision pipeline of Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA). High-confidence predictions ($p_{\max} \ge \tau$) exit immediately after a single forward pass. Uncertain predictions are probed with scale perturbations ($\pm 10\%$). If the probe predictions reach scale consensus, a 3-view average is returned; if scale disagreement occurs, the pipeline escalates to the multi-view pool $\mathcal{V}$ before averaging.}\label{fig:mcg-tta}
+\caption{Decision pipeline of Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA).}\label{fig:mcg-tta}
 \end{figure*}
 
 \subsubsection{Stage 1: Confidence-Gated Screening}
@@ -71,8 +71,8 @@ The model evaluates both probed views to obtain $\mathbf{p}_{s^-} = \sigma(f_\th
 \subsubsection{Stage 3: Consistency Verification and Selective Escalation}
 We evaluate semantic consistency across the triad of predicted labels $\{c_0, c_-, c_+\}$:
 \begin{enumerate}
-\item \textbf{Scale Consensus ($c_0 = c_- = c_+$)}: All scale views agree on the predicted class, indicating that uncertainty is driven by ambient contrast rather than structural grid misalignment. Calibrated posteriors are obtained via triad averaging.
-\item \textbf{Scale Disagreement ($\exists \, a, b \in \{0, -, +\} \text{ s.t. } c_a \ne c_b$)}: Disagreement confirms that the input lies on an unstable decision boundary sensitive to discrete sampling. MCG-TTA selectively escalates to a broader multi-view augmentation pool $\mathcal{V}$ (including horizontal reflections and mild rotations).
+\item \emph{Scale Consensus ($c_0 = c_- = c_+$)}: All scale views agree on the predicted class, indicating that uncertainty reflects low image contrast as opposed to spatial grid misalignment. Calibrated posteriors are obtained via triad averaging.
+\item \emph{Scale Disagreement ($\exists \, a, b \in \{0, -, +\} \text{ s.t. } c_a \ne c_b$)}: Disagreement indicates that the input lies near an ambiguous decision boundary sensitive to discrete sampling. MCG-TTA selectively escalates to a broader multi-view augmentation pool $\mathcal{V}$ (including horizontal reflections and mild rotations).
 \end{enumerate}
 
 The unified calibrated posterior vector $\bar{\mathbf{p}}$ is defined as:
@@ -115,7 +115,8 @@ The final slice-level diagnosis is given by $\hat{y} = \arg\max_c \bar{p}_c$. Th
 \label{alg:mcg_tta}
 \end{table}
 
-\subsection{Analytical Latency and Computational Complexity Modeling}
+
+\subsection{Analytical Latency Modeling on Edge Hardware}
 
 A primary objective of MCG-TTA is to bound execution latency for edge deployment. We formulate an analytical model characterizing expected runtime relative to baseline single-pass inference.
 
@@ -127,18 +128,18 @@ The expected relative latency factor $\lambda = \frac{\mathbb{E}[T]}{T_{\text{ba
 \label{eq:latency}
 \end{equation}
 
-\subsubsection{Latency Bounds and Parameter Invariance}
+\noindent\textbf{Latency Bounds and Parameter Invariance}:
 \begin{itemize}
-\item \textbf{Single-Pass Inference}: Executes a single forward pass with constant relative latency $\lambda_{\text{base}} = 1.0$.
-\item \textbf{Unconditional Multi-View TTA}: Executes all $|\mathcal{V}|$ views uniformly across all samples, incurring a constant overhead factor $\lambda_{\text{full}} = |\mathcal{V}|$ \cite{42}.
-\item \textbf{MCG-TTA}: Bounded by $\lambda \le 1 + \gamma \cdot (|\mathcal{V}| - 1)$. As long as most inputs are confident ($\gamma \ll 1$) and exhibit scale agreement ($\beta \ll 1$), $\lambda$ remains close to unity, avoiding the prohibitive $|\mathcal{V}|\times$ multiplication of brute-force TTA.
+\item \emph{Single-Pass Baseline}: Executes a single forward pass with constant relative latency $\lambda_{\text{base}} = 1.0$.
+\item \emph{Unconditional Multi-View TTA}: Executes all $|\mathcal{V}|$ views uniformly across all samples, incurring a constant overhead factor $\lambda_{\text{full}} = |\mathcal{V}|$ \cite{42}.
+\item \emph{MCG-TTA}: Bounded by $\lambda \le 1 + \gamma \cdot (|\mathcal{V}| - 1)$. As long as most inputs are confident ($\gamma \ll 1$) and exhibit scale agreement ($\beta \ll 1$), $\lambda$ remains close to unity, avoiding the prohibitive $|\mathcal{V}|\times$ multiplication of brute-force TTA.
 \end{itemize}
 
-Crucially, because MCG-TTA operates strictly at inference time by routing perturbed input views through the static model weights $\theta$, it introduces \textbf{zero additional learned parameters} ($|\Theta_{\text{MCG-TTA}}| = |\Theta_{\text{base}}|$).
+Because MCG-TTA operates during inference by routing perturbed views through fixed model weights $\theta$, it requires no additional learned parameters ($|\Theta_{\text{MCG-TTA}}| = |\Theta_{\text{base}}|$).
 
 \subsection{Volumetric Patient-Level Diagnostic Aggregation}
 
-In clinical neuro-oncology, definitive diagnoses are rendered per subject across 3D volumetric examinations rather than isolated 2D slices. 
+In neuro-oncology, clinical diagnosis is rendered per patient across 3D volumetric series, integrating evidence beyond isolated 2D slices.
 
 For a patient examination consisting of $S$ diagnostic axial slices $\{\mathbf{I}_s\}_{s=1}^S$, patient-level diagnostic probabilities are computed via unweighted mean-probability voting across all slices:
 \begin{equation}
@@ -146,3 +147,4 @@ For a patient examination consisting of $S$ diagnostic axial slices $\{\mathbf{I
 \label{eq:patient_aggregation}
 \end{equation}
 Mean-probability aggregation integrates contextual evidence across the volumetric series, reducing slice-level variance and providing a robust subject-level diagnosis.
+
