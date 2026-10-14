@@ -1,0 +1,49 @@
+\documentclass[journal]{IEEEtran}
+
+% *** CITATION PACKAGES ***
+\usepackage{cite}
+
+% *** GRAPHICS RELATED PACKAGES ***
+\usepackage{graphicx}
+\graphicspath{{figures/}{./figures/}{../figures/}}
+\DeclareGraphicsExtensions{.pdf,.jpeg,.png,.eps}
+
+% *** MATH PACKAGES ***
+\usepackage{amsmath,amssymb,amsfonts}
+
+% *** TABLE PACKAGES ***
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+
+% *** URL AND HYPERLINK PACKAGES ***
+\usepackage{url}
+\providecommand{\doi}[1]{\url{https://doi.org/#1}}
+
+% *** TYPOGRAPHY ***
+\usepackage{microtype}
+
+\begin{document}
+
+\title{MCG-TTA: Multi-Scale Consistency-Guided Test-Time Augmentation for Brain Tumor MRI Diagnosis}
+
+\author{Anonymous~Authors%
+\thanks{Manuscript draft submitted for peer review. Code, configs, and pre-trained weights will be made publicly available upon publication.}}
+
+\markboth{IEEE Transactions on Medical Imaging,~Draft~Manuscript,~October~2026}%
+{Anonymous Authors: MCG-TTA: Multi-Scale Consistency-Guided Test-Time Augmentation}
+
+\maketitle
+
+\input{sections/00_abstract}
+\IEEEpeerreviewmaketitle
+
+\input{sections/01_introduction}
+\input{sections/02_related_work}
+\input{sections/03_methodology}
+\input{sections/04_experiments}
+\input{sections/05_discussion}
+\input{sections/06_conclusion}
+\input{sections/references}
+
+\end{document}
