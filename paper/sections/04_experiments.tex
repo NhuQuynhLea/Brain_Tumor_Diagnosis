@@ -1,13 +1,13 @@
 \section{Experiments and Results}
 \label{sec:experiments}
 
-To evaluate performance, the proposed LiteSpeed-Net (LS-Net) architecture and the Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA) framework are compared with established deep learning models commonly utilized for image classification and medical image diagnosis. Following the comparative methodology established in compact vision architecture studies \cite{21}, we evaluate both overparameterized baselines and compact models constrained to a strict sub-1M parameter budget ($<10^6$ parameters). Overparameterized baselines comprise widely adopted backbones across computer vision and medical neuro-imaging: ResNet-50 and ResNet-18 \cite{14}, VGG-16 \cite{39}, EfficientNet-B0 \cite{40}, and MobileNet-V2 \cite{37}, evaluated under standard ImageNet transfer-learning and fine-tuning protocols \cite{10, 54, 55}. Sub-1M architectures include scaled-down variants---ResNet-Tiny, EfficientNet-Tiny, and MobileNet-Tiny---alongside the proposed compact multi-path atrous architecture LS-Net \cite{21}, all trained strictly from scratch under identical hyperparameter conditions. All models are evaluated across both in-domain multi-tumor classification and out-of-domain multi-sequence clinical glioma grading to assess diagnostic accuracy, edge inference speed, cross-cohort robustness, and test-time calibration.
+Following the comparative methodology established in compact vision architecture studies \cite{16}, we evaluate both overparameterized baselines and compact models constrained to a strict sub-1M parameter budget ($<10^6$ parameters). Overparameterized baselines comprise widely adopted backbones across computer vision and medical neuro-imaging: ResNet-50 and ResNet-18 \cite{10}, VGG-16 \cite{29}, EfficientNet-B0 \cite{30}, and MobileNet-V2 \cite{27}, evaluated under standard ImageNet transfer-learning and fine-tuning protocols \cite{7, 38, 39}. Sub-1M architectures include scaled-down variants---ResNet-Tiny, EfficientNet-Tiny, and MobileNet-Tiny---alongside the proposed compact multi-path atrous architecture LS-Net \cite{16}, all trained strictly from scratch under identical hyperparameter conditions. All models are evaluated across both in-domain multi-tumor classification and out-of-domain multi-sequence clinical glioma grading to assess diagnostic accuracy, edge inference speed, cross-cohort robustness, and test-time calibration.
 
 \subsection{Benchmark Suite}
 
-To perform an investigation of the architectural landscape and assess the clinical efficacy of compact deep neural networks, experiments are conducted across two neuro-oncological MRI benchmarks representing distinct diagnostic regimes. The first benchmark is the Nickparvar multi-class brain tumor dataset \cite{34}, comprising 7,023 primary 2D axial, coronal, and sagittal T1-weighted contrast-enhanced (T1ce) brain MRI slices distributed across four mutually exclusive categories: glioma, meningioma, pituitary tumor, and normal brain tissue (no tumor). The dataset exhibits balanced class representations and serves as an established benchmark for automated intracranial lesion classification \cite{34, 55}. To ensure rigorous evaluation, the dataset is partitioned into a fixed split of 70\% training, 15\% validation, and 15\% testing, yielding a fixed independent test cohort of 1,052 images. All models are evaluated across three random seeds (seeds 42, 123, and 456), reporting the mean and standard deviation on this fixed test set.
+To perform an investigation of the architectural landscape and assess the clinical efficacy of compact deep neural networks, experiments are conducted across two neuro-oncological MRI benchmarks representing distinct diagnostic regimes. The first benchmark is the Nickparvar multi-class brain tumor dataset \cite{26}, comprising 7,023 primary 2D axial, coronal, and sagittal T1-weighted contrast-enhanced (T1ce) brain MRI slices distributed across four mutually exclusive categories: glioma, meningioma, pituitary tumor, and normal brain tissue (no tumor). The dataset exhibits balanced class representations and serves as an established benchmark for automated intracranial lesion classification \cite{26}. To ensure rigorous evaluation, the dataset is partitioned into a fixed split of 70\% training, 15\% validation, and 15\% testing, yielding a fixed independent test cohort of 1,052 images. All models are evaluated across three random seeds (seeds 42, 123, and 456), reporting the mean and standard deviation on this fixed test set.
 
-To evaluate model resilience under realistic clinical domain shifts, experiments are further conducted on the multimodal Brain Tumor Segmentation (BraTS 2020) benchmark \cite{2, 28}. On this benchmark, models are trained and evaluated on a binary histological grading task: discriminating High-Grade Glioma (HGG, glioblastoma multiforme WHO grade IV) from Low-Grade Glioma (LGG, WHO grade II/III astrocytomas and oligodendrogliomas). Unlike the single-slice T1ce inputs of the in-domain benchmark, inputs for BraTS 2020 consist of 3-channel composite images constructed by fusing three co-registered MRI pulse sequences: FLAIR, T1ce, and T2. The evaluation cohort comprises 56 unseen diagnostic subjects providing 1,400 multi-parametric axial slices (25 diagnostic slices per patient spanning the core lesion volume). This clinical benchmark introduces significant real-world challenges, including an acute $\sim 4:1$ class imbalance reflecting clinical prevalence, substantial multi-institutional acquisition shifts (differing scanner manufacturers, field strengths, and slice thicknesses \cite{2}), and diffuse infiltrative margins.
+To evaluate model resilience under realistic clinical domain shifts, experiments are further conducted on the multimodal Brain Tumor Segmentation (BraTS 2020) benchmark \cite{2, 23, 45}. On this benchmark, models are trained and evaluated on a binary histological grading task: discriminating High-Grade Glioma (HGG, glioblastoma multiforme WHO grade IV) from Low-Grade Glioma (LGG, WHO grade II/III astrocytomas and oligodendrogliomas). Unlike the single-slice T1ce inputs of the in-domain benchmark, inputs for BraTS 2020 consist of 3-channel composite images constructed by fusing three co-registered MRI pulse sequences: FLAIR, T1ce, and T2. The evaluation cohort comprises 56 unseen diagnostic subjects providing 1,400 multi-parametric axial slices (25 diagnostic slices per patient spanning the core lesion volume). This clinical benchmark introduces significant real-world challenges, including an acute $\sim 4:1$ class imbalance reflecting clinical prevalence, substantial multi-institutional acquisition shifts (differing scanner manufacturers, field strengths, and slice thicknesses \cite{2}), and diffuse infiltrative margins.
 
 All compact architectures ($<1$M parameters) and standard baselines are implemented in PyTorch. For the in-domain Nickparvar benchmark, compact models are trained strictly from scratch with an initial learning rate $\eta_0 = 10^{-3}$ ($0.001$), while overparameterized baselines (ResNet-50, VGG-16, EfficientNet-B0) are initialized with standard ImageNet-1K pretrained weights and fine-tuned with $\eta_0 = 10^{-4}$ ($0.0001$). For the BraTS 2020 grading task, models are trained and fine-tuned separately on multi-sequence BraTS data with $\eta_0 = 10^{-4}$ for 30 epochs; no four-class pretraining weights are transferred. Across all experiments, training is conducted using the AdamW optimizer with weight decay $10^{-4}$, employing a cosine annealing learning rate scheduler and batch size of 32 for 30 epochs with early stopping (patience = 7; extended CNN baselines train up to 50 epochs). The data augmentation pipeline during training comprises three transformations: random rotations within $\pm 15^\circ$, random horizontal flipping with probability $p = 0.5$, and elastic deformations with probability $p = 0.15$. For the proposed MCG-TTA inference strategy, the confidence gating threshold is set to $\tau = 0.85$, the multi-scale probe perturbation factor is $\delta = 0.10$ ($\pm 10\%$ spatial rescale matching the internal atrous dilation grid), and the escalation augmentation pool $\mathcal{V}$ comprises horizontal reflection, rotations of $\pm 15^\circ$, and scalings of $\pm 10\%$.
 
@@ -19,18 +19,20 @@ Accuracy results of the proposed LS-Net model and competing architectures on the
 
 \begin{table*}[t]
 \caption{In-Domain Performance and Edge Efficiency on Nickparvar (4-Class MRI)}\label{tab:nickparvar}
-\centering\scriptsize
-\resizebox{\textwidth}{!}{\begin{tabular}{llrrrrrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{4.5pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{llcccccccc}
 \toprule
-Architecture & Paradigm & Parameters & GFLOPs & Latency (ms) & Throughput (FPS) & Accuracy (\%) & Macro F1 (\%) & Specificity (\%) & AUC (\%) \\
+Architecture & Paradigm & Params & GFLOPs & \begin{tabular}[c]{@{}c@{}}Latency\\(ms)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Throughput\\(FPS)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Accuracy\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Macro F1\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Specificity\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}AUC-ROC\\(\%)\end{tabular} \\
 \midrule
-\textbf{ResNet-50} \cite{14} & Full / Fine-tune & 23.52M & 8.17 & 67.89 & 14.7 & $\mathbf{99.14 \pm 0.16}$ & $\mathbf{99.15 \pm 0.17}$ & $99.71 \pm 0.06$ & $99.92 \pm 0.05$ \\
-\textbf{EfficientNet-B0} \cite{40} & Full / Fine-tune & 4.01M & 0.77 & 23.91 & 41.8 & $99.08 \pm 0.28$ & $99.08 \pm 0.27$ & $99.70 \pm 0.09$ & $\mathbf{99.97 \pm 0.02}$ \\
-\textbf{VGG-16} \cite{39} & Full / Fine-tune & 27.56M & 30.72 & 150.03 & 6.7 & $98.86 \pm 0.10$ & $98.86 \pm 0.10$ & $99.62 \pm 0.03$ & $99.94 \pm 0.03$ \\
-\textbf{ResNet-18} \cite{14} & Full / Fine-tune & 11.18M & 3.63 & 27.96 & 35.8 & $98.70 \pm 0.47$ & $98.70 \pm 0.47$ & $99.57 \pm 0.16$ & $99.94 \pm 0.02$ \\
-\textbf{MobileNet-V2} \cite{37} & Full / Fine-tune & 2.23M & 0.60 & 17.35 & 57.6 & $98.45 \pm 0.33$ & $98.45 \pm 0.33$ & $99.48 \pm 0.11$ & $99.95 \pm 0.03$ \\
+\textbf{ResNet-50} \cite{10} & Full / Fine-tune & 23.52M & 8.17 & 67.89 & 14.7 & $\mathbf{99.14 \pm 0.16}$ & $\mathbf{99.15 \pm 0.17}$ & $99.71 \pm 0.06$ & $99.92 \pm 0.05$ \\
+\textbf{EfficientNet-B0} \cite{30} & Full / Fine-tune & 4.01M & 0.77 & 23.91 & 41.8 & $99.08 \pm 0.28$ & $99.08 \pm 0.27$ & $99.70 \pm 0.09$ & $\mathbf{99.97 \pm 0.02}$ \\
+\textbf{VGG-16} \cite{29} & Full / Fine-tune & 27.56M & 30.72 & 150.03 & 6.7 & $98.86 \pm 0.10$ & $98.86 \pm 0.10$ & $99.62 \pm 0.03$ & $99.94 \pm 0.03$ \\
+\textbf{ResNet-18} \cite{10} & Full / Fine-tune & 11.18M & 3.63 & 27.96 & 35.8 & $98.70 \pm 0.47$ & $98.70 \pm 0.47$ & $99.57 \pm 0.16$ & $99.94 \pm 0.02$ \\
+\textbf{MobileNet-V2} \cite{27} & Full / Fine-tune & 2.23M & 0.60 & 17.35 & 57.6 & $98.45 \pm 0.33$ & $98.45 \pm 0.33$ & $99.48 \pm 0.11$ & $99.95 \pm 0.03$ \\
 \midrule
-\textbf{LS-Net} \cite{21} & Compact / Scratch & \textbf{0.91M} & \textbf{0.36} & \textbf{11.30} & \textbf{88.5} & $\mathbf{98.29 \pm 0.25}$ & $\mathbf{98.29 \pm 0.25}$ & $99.43 \pm 0.08$ & $99.79 \pm 0.08$ \\
+\textbf{LS-Net} \cite{16} & Compact / Scratch & \textbf{0.91M} & \textbf{0.36} & \textbf{11.30} & \textbf{88.5} & $\mathbf{98.29 \pm 0.25}$ & $\mathbf{98.29 \pm 0.25}$ & $99.43 \pm 0.08$ & $99.79 \pm 0.08$ \\
 \textbf{EfficientNet-Tiny} & Compact / Scratch & 0.75M & 0.19 & 16.14 & 61.9 & $98.13 \pm 0.38$ & $98.14 \pm 0.38$ & $99.38 \pm 0.13$ & $99.85 \pm 0.04$ \\
 \textbf{ResNet-Tiny} & Compact / Scratch & 0.98M & 2.51 & 24.19 & 41.3 & $97.72 \pm 0.17$ & $97.72 \pm 0.16$ & $99.24 \pm 0.05$ & $99.78 \pm 0.03$ \\
 \textbf{MobileNet-Tiny} & Compact / Scratch & 0.40M & 0.12 & 11.43 & 87.5 & $97.65 \pm 0.14$ & $97.67 \pm 0.14$ & $99.22 \pm 0.05$ & $99.78 \pm 0.04$ \\
@@ -38,7 +40,7 @@ Architecture & Paradigm & Parameters & GFLOPs & Latency (ms) & Throughput (FPS) 
 \end{tabular}}
 \end{table*}
 
-Among the sub-1M compact models trained from scratch, LS-Net establishes the superior accuracy-latency trade-off. While EfficientNet-Tiny achieves lower theoretical arithmetic operations (0.19 GFLOPs vs. 0.36 GFLOPs), its sequential inverted bottleneck operations and Squeeze-and-Excitation mechanisms incur higher real-world runtime latency (16.14 ms, 61.9 FPS) than LS-Net (11.30 ms, 88.5 FPS) due to memory fragmentation and kernel scheduling overheads \cite{32}. ResNet-Tiny exhibits the heaviest computational burden among compact variants (2.51 GFLOPs, 24.19 ms) due to dense residual convolutions, yet trails LS-Net by 0.57 pp in accuracy (97.72\% vs. 98.29\%). MobileNet-Tiny attains high throughput (87.5 FPS) at 0.40M parameters, but yields the lowest overall accuracy (97.65\%), demonstrating that aggressive channel pruning without multi-scale receptive field expansion compromises discriminative capacity.
+Among the sub-1M compact models trained from scratch, LS-Net establishes the superior accuracy-latency trade-off. While EfficientNet-Tiny achieves lower theoretical arithmetic operations (0.19 GFLOPs vs. 0.36 GFLOPs), its sequential inverted bottleneck operations and Squeeze-and-Excitation mechanisms incur higher real-world runtime latency (16.14 ms, 61.9 FPS) than LS-Net (11.30 ms, 88.5 FPS) due to memory fragmentation and kernel scheduling overheads \cite{25}. ResNet-Tiny exhibits the heaviest computational burden among compact variants (2.51 GFLOPs, 24.19 ms) due to dense residual convolutions, yet trails LS-Net by 0.57 pp in accuracy (97.72\% vs. 98.29\%). MobileNet-Tiny attains high throughput (87.5 FPS) at 0.40M parameters, but yields the lowest overall accuracy (97.65\%), demonstrating that aggressive channel pruning without multi-scale receptive field expansion compromises discriminative capacity.
 
 \subsection{Cross-Dataset Generalization and Clinical Grading}
 
@@ -46,20 +48,22 @@ While in-domain benchmark evaluations demonstrate near-parity between compact an
 
 \begin{table*}[t]
 \caption{Cross-Dataset Generalization and Clinical Grading on BraTS 2020}\label{tab:brats}
-\centering\scriptsize
-\resizebox{\textwidth}{!}{\begin{tabular}{lrrrrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{7pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{lcccccccc}
 \toprule
-Model & Parameters & Slice F1 (\%) & Slice Acc (\%) & Slice AUC (\%) & Patient F1 (\%) & Patient Acc (\%) & LGG Patient Recall (Caught / 12) \\
+Model & Params & \begin{tabular}[c]{@{}c@{}}Slice F1\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Slice Acc\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Slice AUC\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Patient F1\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Patient Acc\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}LGG Patient Recall\\(Caught / 12)\end{tabular} \\
 \midrule
-\textbf{VGG-16} \cite{39} & 27.56M & $\mathbf{89.31 \pm 0.06}$ & $\mathbf{92.57 \pm 0.10}$ & $\mathbf{96.25 \pm 0.93}$ & $\mathbf{92.34 \pm 3.33}$ & $\mathbf{94.64}$ & $\mathbf{11.0 / 12\ (91.7\%)}$ \\
-\textbf{ResNet-50} \cite{14} & 23.52M & $84.76 \pm 0.86$ & $89.65 \pm 1.21$ & $94.85 \pm 0.54$ & $87.91 \pm 1.10$ & 91.96 & $9.5 / 12\ (79.2\%)$ \\
+\textbf{VGG-16} \cite{29} & 27.56M & $\mathbf{89.31 \pm 0.06}$ & $\mathbf{92.57 \pm 0.10}$ & $\mathbf{96.25 \pm 0.93}$ & $\mathbf{92.34 \pm 3.33}$ & $\mathbf{94.64}$ & $\mathbf{11.0 / 12\ (91.7\%)}$ \\
+\textbf{ResNet-50} \cite{10} & 23.52M & $84.76 \pm 0.86$ & $89.65 \pm 1.21$ & $94.85 \pm 0.54$ & $87.91 \pm 1.10$ & 91.96 & $9.5 / 12\ (79.2\%)$ \\
 \textbf{ResNet-Tiny} & 0.98M & $84.57 \pm 2.92$ & $90.07 \pm 1.92$ & $94.71 \pm 1.14$ & $84.68 \pm 2.33$ & 90.18 & $8.5 / 12\ (70.8\%)$ \\
-\textbf{EfficientNet-B0} \cite{40} & 4.01M & $84.46 \pm 0.99$ & $88.90 \pm 0.15$ & $94.82 \pm 1.01$ & $90.04 \pm 3.17$ & 92.86 & $\mathbf{11.0 / 12\ (91.7\%)}$ \\
+\textbf{EfficientNet-B0} \cite{30} & 4.01M & $84.46 \pm 0.99$ & $88.90 \pm 0.15$ & $94.82 \pm 1.01$ & $90.04 \pm 3.17$ & 92.86 & $\mathbf{11.0 / 12\ (91.7\%)}$ \\
 \midrule
 \textbf{MCG-TTA (proposed)} & \textbf{0.91M} & $\mathbf{83.45 \pm 2.07}$ & $\mathbf{88.83 \pm 1.04}$ & $\mathbf{90.74 \pm 3.20}$ & $\mathbf{88.15 \pm 1.83}$ & \textbf{91.97} & $\mathbf{10.0 / 12\ (83.3\%)}$ \\
-\textbf{LS-Net (base)} \cite{21} & \textbf{0.91M} & $82.02 \pm 2.36$ & $88.25 \pm 0.86$ & $89.82 \pm 4.29$ & $89.33 \pm 0.92$ & 92.86 & $10.0 / 12\ (83.3\%)$ \\
-\textbf{ResNet-18} \cite{14} & 11.18M & $81.08 \pm 1.05$ & $85.75 \pm 0.16$ & $93.46 \pm 1.04$ & $80.88 \pm 1.29$ & 85.71 & $10.0 / 12\ (83.3\%)$ \\
-\textbf{MobileNet-V2} \cite{37} & 2.23M & $78.87 \pm 1.15$ & $85.32 \pm 0.76$ & $91.21 \pm 0.46$ & $79.40 \pm 3.64$ & 85.71 & $8.5 / 12\ (70.8\%)$ \\
+\textbf{LS-Net (base)} \cite{16} & \textbf{0.91M} & $82.02 \pm 2.36$ & $88.25 \pm 0.86$ & $89.82 \pm 4.29$ & $89.33 \pm 0.92$ & 92.86 & $10.0 / 12\ (83.3\%)$ \\
+\textbf{ResNet-18} \cite{10} & 11.18M & $81.08 \pm 1.05$ & $85.75 \pm 0.16$ & $93.46 \pm 1.04$ & $80.88 \pm 1.29$ & 85.71 & $10.0 / 12\ (83.3\%)$ \\
+\textbf{MobileNet-V2} \cite{27} & 2.23M & $78.87 \pm 1.15$ & $85.32 \pm 0.76$ & $91.21 \pm 0.46$ & $79.40 \pm 3.64$ & 85.71 & $8.5 / 12\ (70.8\%)$ \\
 \textbf{EfficientNet-Tiny} & 0.75M & $76.00 \pm 1.03$ & $80.78 \pm 0.60$ & $89.09 \pm 0.49$ & $80.38 \pm 5.67$ & 83.93 & $\mathbf{11.5 / 12\ (95.8\%)}$ \\
 \textbf{MobileNet-Tiny} & 0.40M & $68.89 \pm 5.36$ & $74.68 \pm 5.50$ & $82.57 \pm 6.44$ & $71.09 \pm 4.69$ & 76.79 & $9.0 / 12\ (75.0\%)$ \\
 \bottomrule
@@ -76,10 +80,12 @@ To evaluate the mechanisms governing MCG-TTA's performance gains and edge runtim
 
 \begin{table*}[t]
 \caption{Ablation of Test-Time Augmentation (TTA) Strategies on LS-Net (BraTS 2020)}\label{tab:ablation}
-\centering\scriptsize
-\resizebox{\textwidth}{!}{\begin{tabular}{llrrrrrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.3}
+\setlength{\tabcolsep}{6pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{llcccccccc}
 \toprule
-Strategy & Description / Gating Rule & Trigger Rate (\%) & Extra Forwards / Trigger & Modelled Latency (ms) & Relative Latency & Slice F1 (s42 / s123) (\%) & Mean Slice F1 (\%) & Mean Patient F1 (\%) & LGG Patient Recall \\
+Strategy & Description / Decision Rule & \begin{tabular}[c]{@{}c@{}}Trigger\\Rate (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Extra Passes\\/ Trigger\end{tabular} & \begin{tabular}[c]{@{}c@{}}Latency\\(ms)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Relative\\Latency\end{tabular} & \begin{tabular}[c]{@{}c@{}}Slice F1 (s42 / s123)\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Mean Slice\\F1 (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Patient\\F1 (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}LGG Recall\\(Cases / 24)\end{tabular} \\
 \midrule
 \textbf{LS-Net (Base)} & Single standard forward pass & 0.0\% & 0.0 & \textbf{5.60} & \textbf{1.00$\times$} & 83.69 / 80.35 & 82.02 & \textbf{89.34} & 20 / 24 \\
 \midrule
@@ -100,27 +106,29 @@ While accuracy results indicate that compact models are competitive, evaluating 
 
 \begin{table*}[t]
 \caption{Edge Hardware Profiling and Computational Complexity}\label{tab:edge}
-\centering\scriptsize
-\resizebox{\textwidth}{!}{\begin{tabular}{llrrrrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{6pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{llccccccc}
 \toprule
-Model Class & Architecture & Parameters (M) & Disk Size (MB) & FLOPs (GFLOPs) & MACs (GMACs) & Latency Batch=1 (ms) & Throughput (FPS) & Speedup vs ResNet-50 \\
+Model Class & Architecture & \begin{tabular}[c]{@{}c@{}}Params\\(M)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Disk Size\\(MB)\end{tabular} & \begin{tabular}[c]{@{}c@{}}FLOPs\\(GFLOPs)\end{tabular} & \begin{tabular}[c]{@{}c@{}}MACs\\(GMACs)\end{tabular} & \begin{tabular}[c]{@{}c@{}}CPU Latency\\$B=1$ (ms)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Throughput\\(FPS)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Speedup vs.\\ResNet-50\end{tabular} \\
 \midrule
-\textbf{Heavyweight Baselines} & \textbf{VGG-16} \cite{39} & 27.56M & 105.14 & 30.72 & 15.36 & 150.03 & 6.7 & 0.45$\times$ \\
-& \textbf{ResNet-50} \cite{14} & 23.52M & 89.71 & 8.17 & 4.09 & 67.89 & 14.7 & 1.00$\times$ (Ref) \\
-& \textbf{ResNet-18} \cite{14} & 11.18M & 42.64 & 3.63 & 1.81 & 27.96 & 35.8 & 2.43$\times$ \\
-& \textbf{EfficientNet-B0} \cite{40} & 4.01M & 15.31 & 0.77 & 0.39 & 23.91 & 41.8 & 2.84$\times$ \\
-& \textbf{MobileNet-V2} \cite{37} & 2.23M & 8.50 & 0.60 & 0.30 & 17.35 & 57.6 & 3.91$\times$ \\
+\textbf{Heavyweight Baselines} & VGG-16 \cite{29} & 27.56M & 105.14 & 30.72 & 15.36 & 150.03 & 6.7 & 0.45$\times$ \\
+& ResNet-50 \cite{10} & 23.52M & 89.71 & 8.17 & 4.09 & 67.89 & 14.7 & 1.00$\times$ (Ref) \\
+& ResNet-18 \cite{10} & 11.18M & 42.64 & 3.63 & 1.81 & 27.96 & 35.8 & 2.43$\times$ \\
+& EfficientNet-B0 \cite{30} & 4.01M & 15.31 & 0.77 & 0.39 & 23.91 & 41.8 & 2.84$\times$ \\
+& MobileNet-V2 \cite{27} & 2.23M & 8.50 & 0.60 & 0.30 & 17.35 & 57.6 & 3.91$\times$ \\
 \midrule
-\textbf{Compact Models ($<1$M)} & \textbf{ResNet-Tiny} & 0.98M & 3.72 & 2.51 & 1.26 & 24.19 & 41.3 & 2.81$\times$ \\
-& \textbf{MCG-TTA (proposed)} & \textbf{0.91M} & \textbf{3.49} & \textbf{$\sim$0.68} & \textbf{$\sim$0.34} & \textbf{21.47} & \textbf{46.6} & \textbf{3.16$\times$} \\
-& \textbf{EfficientNet-Tiny} & 0.75M & 2.88 & 0.19 & 0.09 & 16.14 & 61.9 & 4.21$\times$ \\
-& \textbf{MobileNet-Tiny} & 0.40M & 1.53 & 0.12 & 0.06 & 11.43 & 87.5 & 5.94$\times$ \\
-& \textbf{LS-Net (base)} \cite{21} & \textbf{0.91M} & \textbf{3.49} & \textbf{0.36} & \textbf{0.18} & \textbf{11.30} & \textbf{88.5} & \textbf{6.01$\times$} \\
+\textbf{Compact Models ($<1$M)} & ResNet-Tiny & 0.98M & 3.72 & 2.51 & 1.26 & 24.19 & 41.3 & 2.81$\times$ \\
+& \textbf{MCG-TTA (proposed)} & \textbf{0.91M} & \textbf{3.49} & $\mathbf{\sim 0.68}$ & $\mathbf{\sim 0.34}$ & \textbf{21.47} & \textbf{46.6} & $\mathbf{3.16\times}$ \\
+& EfficientNet-Tiny & 0.75M & 2.88 & 0.19 & 0.09 & 16.14 & 61.9 & 4.21$\times$ \\
+& MobileNet-Tiny & 0.40M & 1.53 & 0.12 & 0.06 & 11.43 & 87.5 & 5.94$\times$ \\
+& \textbf{LS-Net (base)} \cite{16} & \textbf{0.91M} & \textbf{3.49} & \textbf{0.36} & \textbf{0.18} & \textbf{11.30} & \textbf{88.5} & $\mathbf{6.01\times}$ \\
 \bottomrule
 \end{tabular}}
 \end{table*}
 
-The profiling results demonstrate that theoretical FLOP counts alone fail to predict real-world hardware runtime, consistent with the architectural insights demonstrated by Kyrkou \cite{21}. Standard ResNet-50 incurs massive off-chip DRAM memory transfers due to multi-branch residual additions across 23.52M weights (89.71 MB memory footprint). This generates severe cache thrashing, capping throughput at 14.7 FPS. In contrast, LS-Net requires only 3.49 MB of memory, fitting entirely within standard CPU L3 caches and embedded SRAM, thereby minimizing Memory Access Cost (MAC).
+The profiling results demonstrate that theoretical FLOP counts alone fail to predict real-world hardware runtime, consistent with the architectural insights demonstrated by Kyrkou \cite{16}. Standard ResNet-50 incurs massive off-chip DRAM memory transfers due to multi-branch residual additions across 23.52M weights (89.71 MB memory footprint). This generates severe cache thrashing, capping throughput at 14.7 FPS. In contrast, LS-Net requires only 3.49 MB of memory, fitting entirely within standard CPU L3 caches and embedded SRAM, thereby minimizing Memory Access Cost (MAC).
 
 Furthermore, while MobileNet architectures rely on inverted bottleneck blocks that temporarily expand feature dimensions by an expansion factor $t=6$---inducing intermediate tensor memory spikes---LS-Net avoids expansion bottlenecks by splitting channels across parallel depthwise atrous branches ($d=1, 2, 3$). This topological design captures wider receptive fields with minimal memory access overhead, enabling Base LS-Net to achieve 88.5 FPS (11.30 ms), a $6.01\times$ speedup over ResNet-50. Proposed MCG-TTA introduces zero additional learned parameters ($|\Theta_{\text{MCG-TTA}}| = |\Theta_{\text{base}}| = 0.91\text{M}$), entirely preserving the compact 3.49 MB memory footprint. Accounting for dynamic triggering, MCG-TTA operates at an effective arithmetic complexity of $\sim 0.68$ GFLOPs ($\sim 0.34$ GMACs) and a measured single-slice edge latency of 21.47 ms (46.6 FPS), delivering a $3.16\times$ speedup over ResNet-50 while operating well above the 30 FPS real-time threshold required for live intra-operative scanner navigation.
 
@@ -128,24 +136,28 @@ Furthermore, while MobileNet architectures rely on inverted bottleneck blocks th
 
 To evaluate clinical diagnostic safety across distinct intracranial tumor types, Table~\ref{tab:sensitivity} reports the per-class Macro F1-score breakdown on the Nickparvar 4-class benchmark. Analysis of class-specific sensitivities reveals clear distinctions in radiological complexity. Pituitary adenomas achieve $>99.3\%$ F1 across all architectures (MCG-TTA: 99.52\%, ResNet-50: 99.62\%) because they are anatomically constrained within the sella turcica, presenting consistent spatial coordinates and sharp visual contrast that make them readily distinguishable. Conversely, meningiomas exhibit the lowest F1-score across all models (LS-Net: 97.32\%, MCG-TTA: 97.60\%, ResNet-50: 98.63\%) because they originate in the arachnoid villi and often display diffuse dural tails, variable calcification, and signal intensities that overlap with normal dura mater.
 
-\begin{table}[h]
+\begin{table*}[t]
 \caption{Per-Class Diagnostic Sensitivity Breakdown on Nickparvar 4-Class (\%)}\label{tab:sensitivity}
-\centering\scriptsize
-\resizebox{\columnwidth}{!}{\begin{tabular}{lrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{8pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{lcccc}
 \toprule
-Model & Glioma F1 (\%) & Meningioma F1 (\%) \emph{(Hardest)} & No Tumor F1 (\%) & Pituitary F1 (\%) \emph{(Easiest)} \\
+Model & \begin{tabular}[c]{@{}c@{}}Glioma\\F1 (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Meningioma F1 (\%)\\\emph{(Hardest)}\end{tabular} & \begin{tabular}[c]{@{}c@{}}No Tumor\\F1 (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Pituitary F1 (\%)\\\emph{(Easiest)}\end{tabular} \\
 \midrule
-\textbf{ResNet-50} \cite{14} & $99.19 \pm 0.11$ & $98.63 \pm 0.22$ & $99.14 \pm 0.30$ & $99.62 \pm 0.19$ \\
-\textbf{EfficientNet-B0} \cite{40} & $98.94 \pm 0.39$ & $98.69 \pm 0.38$ & $99.27 \pm 0.12$ & $99.43 \pm 0.38$ \\
-\textbf{VGG-16} \cite{39} & $98.87 \pm 0.19$ & $98.39 \pm 0.21$ & $98.81 \pm 0.20$ & $99.37 \pm 0.39$ \\
-\textbf{ResNet-18} \cite{14} & $98.69 \pm 0.49$ & $97.94 \pm 0.65$ & $98.81 \pm 0.53$ & $99.37 \pm 0.29$ \\
+\textbf{ResNet-50} \cite{10} & $99.19 \pm 0.11$ & $98.63 \pm 0.22$ & $99.14 \pm 0.30$ & $99.62 \pm 0.19$ \\
+\textbf{EfficientNet-B0} \cite{30} & $98.94 \pm 0.39$ & $98.69 \pm 0.38$ & $99.27 \pm 0.12$ & $99.43 \pm 0.38$ \\
+\textbf{VGG-16} \cite{29} & $98.87 \pm 0.19$ & $98.39 \pm 0.21$ & $98.81 \pm 0.20$ & $99.37 \pm 0.39$ \\
+\textbf{ResNet-18} \cite{10} & $98.69 \pm 0.49$ & $97.94 \pm 0.65$ & $98.81 \pm 0.53$ & $99.37 \pm 0.29$ \\
 \midrule
-\textbf{LS-Net} \cite{21} & $\mathbf{98.00 \pm 0.39}$ & $\mathbf{97.32 \pm 0.40}$ & $\mathbf{98.35 \pm 0.22}$ & $\mathbf{99.50 \pm 0.39}$ \\
+\textbf{LS-Net} \cite{16} & $\mathbf{98.00 \pm 0.39}$ & $\mathbf{97.32 \pm 0.40}$ & $\mathbf{98.35 \pm 0.22}$ & $\mathbf{99.50 \pm 0.39}$ \\
 \textbf{MCG-TTA (proposed)} & $\mathbf{98.15 \pm 0.18}$ & $\mathbf{97.60 \pm 0.22}$ & $\mathbf{98.42 \pm 0.19}$ & $\mathbf{99.52 \pm 0.09}$ \\
 \bottomrule
 \end{tabular}}
-\end{table}
+\end{table*}
 
 To evaluate whether performance differences between compact models and large backbones are statistically significant on paired sample predictions, McNemar's test with continuity correction ($\chi^2 = (|b - c| - 1)^2 / (b + c)$ for discordant pair counts $b$ and $c$) is computed at significance level $\alpha = 0.05$. On the Pituitary and No-Tumor categories, McNemar's test yields $p > 0.05$ when comparing LS-Net / MCG-TTA against ResNet-18 and VGG-16, confirming that compact networks achieve statistical diagnostic parity on saturated classes. Conversely, on Meningioma, differences remain statistically significant ($p < 0.05$), reflecting the diagnostic challenge of delicate dural boundaries. On this challenging meningioma class, MCG-TTA improves LS-Net F1 from 97.32\% to 97.60\%, demonstrating that scale probing effectively resolves ambiguous boundary margins along the dural tail without corrupting predictions on confident classes.
 
-Qualitative error investigations reveal the fundamental failure mode of compact atrous architectures under domain shift. While parallel atrous convolutions (MPAC blocks \cite{21}) expand the effective receptive field without parameter inflation, their kernels sample features on a sparse regular spatial lattice ($stride = d$). In overparameterized networks (e.g., DeepLab \cite{5}), dozens of subsequent layers interpolate across these sampling gaps. In compact sub-1M networks, however, limited depth restricts cross-grid feature smoothing. When tested on multi-sequence BraTS grading where acquisition zoom and slice thickness vary, fixed dilation rates ($d=1, 2, 3$) can skip fine infiltrating tumor margins or necrotic foci, concentrating errors in low-confidence predictions located precisely at lesion boundaries. By perturbing uncertain predictions by $\pm 10\%$ scale factors, MCG-TTA shifts spatial boundaries across the discrete grid spacing $\Delta x = d$, enabling parallel depthwise branches to re-sample lesion margins along complementary spatial coordinates. When scale predictions agree, triad averaging stabilizes posteriors; when they disagree, targeted escalation resolves ambiguity. This inductive match between test-time transformation and network architecture explains why MCG-TTA successfully recovers up to +1.8 pp slice F1 while preserving clinical low-grade glioma detection at edge speeds.
+Qualitative error investigations reveal the fundamental failure mode of compact atrous architectures under domain shift. While parallel atrous convolutions (MPAC blocks \cite{16}) expand the effective receptive field without parameter inflation, their kernels sample features on a sparse regular spatial lattice ($stride = d$). In overparameterized networks (e.g., DeepLab \cite{5}), dozens of subsequent layers interpolate across these sampling gaps. In compact sub-1M networks, however, limited depth restricts cross-grid feature smoothing. When tested on multi-sequence BraTS grading where acquisition zoom and slice thickness vary, fixed dilation rates ($d=1, 2, 3$) can skip fine infiltrating tumor margins or necrotic foci, concentrating errors in low-confidence predictions located precisely at lesion boundaries. By perturbing uncertain predictions by $\pm 10\%$ scale factors, MCG-TTA shifts spatial boundaries across the discrete grid spacing $\Delta x = d$, enabling parallel depthwise branches to re-sample lesion margins along complementary spatial coordinates. When scale predictions agree, triad averaging stabilizes posteriors; when they disagree, targeted escalation resolves ambiguity. This inductive match between test-time transformation and network architecture explains why MCG-TTA successfully recovers up to +1.8 pp slice F1 while preserving clinical low-grade glioma detection at edge speeds.
+
+

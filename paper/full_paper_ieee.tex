@@ -21,17 +21,18 @@
 \providecommand{\doi}[1]{\url{https://doi.org/#1}}
 
 % *** TYPOGRAPHY ***
+\usepackage[T1]{fontenc}
 \usepackage{microtype}
 
 \begin{document}
 
-\title{MCG-TTA: Multi-Scale Consistency-Guided Test-Time Augmentation for Brain Tumor MRI Diagnosis}
+\title{Efficient Brain MRI Classification with Sub-1M Parameter Models and Multi-Scale Consistency-Guided Inference}
 
 \author{Anonymous~Authors%
 \thanks{Manuscript draft submitted for peer review. Code, configs, and pre-trained weights will be made publicly available upon publication.}}
 
 \markboth{IEEE Transactions on Medical Imaging,~Draft~Manuscript,~October~2026}%
-{Anonymous Authors: MCG-TTA: Multi-Scale Consistency-Guided Test-Time Augmentation}
+{Anonymous Authors: Efficient Brain MRI Classification with Sub-1M Parameter Models}
 
 \maketitle
 \begin{abstract}
@@ -49,15 +50,15 @@ Brain MRI, convolutional neural networks, compact neural networks, test-time aug
 \IEEEpeerreviewmaketitle
 
 \section{Introduction}
-\IEEEPARstart{D}{eep} Neural Networks (DNNs) have established foundational breakthroughs across core computer vision tasks, ranging from large-scale visual recognition \cite{11, 24} to dense spatial reasoning and object detection \cite{14, 53}. This trajectory was catalyzed by Convolutional Neural Networks (CNNs) \cite{23}, which embedded translation equivariance and local spatial hierarchies into learnable architectures. In recent years, the computer vision landscape has been profoundly shaped by the advent of Vision Transformers (ViTs) \cite{9}, masked image modeling \cite{46}, and self-supervised foundation backbones \cite{1}. However, this contemporary trajectory has predominantly reinforced a ``scale-driven'' paradigm, wherein marginal performance increments are achieved by training networks with tens or hundreds of millions---and increasingly billions---of parameters over colossal compute clusters and proprietary web-scale datasets \cite{11, 42}.
+\IEEEPARstart{D}{eep} Neural Networks (DNNs) have established foundational breakthroughs across core computer vision tasks, ranging from large-scale visual recognition \cite{8, 19} to dense spatial reasoning and object detection \cite{10, 37}. This technological trajectory was initially catalyzed by Convolutional Neural Networks (CNNs) \cite{15, 18}, which embedded translation equivariance and localized hierarchies into learnable architectures. To overcome gradient degradation in deeper layers, residual connections \cite{10} and compound scaling principles \cite{30} subsequently enabled networks to scale in depth and width. In recent years, the visual landscape has experienced an additional paradigm shift toward Vision Transformers (ViTs) \cite{6, 33}, masked image modeling \cite{34}, and self-supervised foundation backbones \cite{1}. While relaxing convolutional inductive biases enables dynamic global contextual reasoning, modern progress has predominantly reinforced an unsustainable ``scale-driven'' paradigm \cite{32}: marginal benchmark gains are increasingly acquired by expanding architectures to tens or hundreds of millions---and increasingly billions---of parameters over colossal compute clusters and proprietary web-scale datasets \cite{8, 32} (as analyzed across dominant paradigms in Section~\ref{sec:related_work}).
 
-In parallel, deep learning has revolutionized medical image analysis \cite{10, 27}, demonstrating specialist-level efficacy in complex diagnostic tasks \cite{10}. Within neuro-oncology, non-invasive Magnetic Resonance Imaging (MRI) serves as the primary clinical imaging modality for the detection, differential diagnosis, and histologic grading of intracranial neoplasms, including gliomas, meningiomas, and pituitary adenomas \cite{2, 34}. Deep learning architectures applied to multi-sequence brain MRI have automated diagnostic workflows that historically required exhaustive manual radiological review \cite{2, 34, 38}. Standard clinical diagnostic paradigms rely heavily on overparameterized deep backbones---such as deep ResNets \cite{14}, VGG networks \cite{39}, and compound-scaled EfficientNets \cite{40}---to identify subtle textural heterogeneity, necrotic cores, and invasive margins across disparate axial, coronal, and sagittal planes \cite{36, 44}.
+In parallel with these computational trends, deep learning has profoundly influenced clinical radiology, demonstrating diagnostic efficacy competitive with subspecialized clinicians across diverse imaging modalities \cite{7, 28}. Within neuro-oncology, non-invasive Magnetic Resonance Imaging (MRI) serves as the definitive clinical modality for the screening, differential diagnosis, and histologic grading of intracranial neoplasms \cite{2, 26, 38}. Clinical decision-making requires precise differentiation among distinct pathological entities---primarily diffuse infiltrative gliomas, extra-axial dural meningiomas, and sellar pituitary adenomas---as each exhibits vastly disparate treatment pathways ranging from urgent surgical resection and chemoradiotherapy to conservative observation \cite{26, 40}. Radiologically, this differential triage demands meticulous evaluation of subtle cytoarchitectural hallmarks: discerning irregular invasive margins from well-circumscribed borders, characterizing microvascular permeability and blood-brain barrier disruption, and distinguishing non-enhancing infiltrative edema from central necrotic cores across multi-parametric acquisitions (including T1-weighted, contrast-enhanced T1ce, T2-weighted, and FLAIR sequences) \cite{2, 28, 38}. However, manual multi-planar slice inspection across axial, coronal, and sagittal volumes imposes immense cognitive burdens on neuroradiologists, creating clinical vulnerability to intra- and inter-observer diagnostic variability and triage delays \cite{7, 40}. To automate the detection of these complex radiological phenotypes, prevailing medical imaging pipelines have routinely transposed off-the-shelf, overparameterized computer vision backbones into clinical workflows \cite{7, 39, 40}, inadvertently importing their extreme memory and computational footprints into hospital environments.
 
-Despite these empirical successes, a critical translational divide persists between benchtop benchmark accuracy and clinical, point-of-care utility \cite{20, 26}. In healthcare environments, real-world deployment rarely occurs in centralized, high-throughput cloud data centers. Routine transmission of high-resolution volumetric neuroimaging to external cloud infrastructures encounters severe regulatory barriers, notably patient confidentiality mandates and data protection governance such as HIPAA in the United States and GDPR in the European Union \cite{10, 26}. Furthermore, cloud dependency introduces vulnerability to variable network bandwidth, transmission latency, and service outages---risks that are unacceptable during acute clinical scenarios, emergency neuro-triage, or intra-operative surgical navigation \cite{20, 33}. Consequently, bringing intelligence directly to the clinical edge---operating locally on hospital workstations, embedded scanner consoles, and mobile intra-operative carts---has emerged as an urgent imperative \cite{12, 25, 26}.
+Despite these empirical successes, a critical translational divide persists between benchtop benchmark accuracy and clinical, point-of-care utility \cite{21, 25}. In healthcare environments, real-world deployment rarely occurs in centralized, high-throughput cloud data centers. Routine transmission of high-resolution volumetric neuroimaging to external cloud infrastructures encounters severe regulatory barriers, notably patient confidentiality mandates and data protection governance such as HIPAA in the United States and GDPR in the European Union \cite{21}. Furthermore, cloud dependency introduces vulnerability to variable network bandwidth, transmission latency, and service outages---risks that are unacceptable during acute clinical scenarios, emergency neuro-triage, or intra-operative surgical navigation \cite{21, 25}. Consequently, bringing intelligence directly to the clinical edge---operating locally on hospital workstations, embedded scanner consoles, and mobile intra-operative carts---has emerged as an urgent imperative \cite{9, 20, 21}.
 
-However, edge deployment imposes uncompromising physical constraints: strict inference latency windows, severely constrained Random Access Memory (RAM), low thermal design power (TDP), and limited on-chip arithmetic hardware \cite{12, 33, 41}. To accommodate mobile and decentralized environments, the vision community introduced lightweight architectural designs, including depthwise separable convolutions in MobileNets \cite{15, 37} and Xception \cite{17}, channel shuffling in ShuffleNet \cite{32}, and cheap linear feature generation in GhostNet \cite{13}. Yet, the overwhelming majority of these ``efficient'' models predominantly inhabit a mobile-scale budget of 2 to 20 million parameters. In contrast, the sub-1M parameter regime ($<1,000,000$ parameters) remains fundamentally underexplored in medical imaging, particularly under the practical constraints of small-to-medium institutional datasets \cite{3, 21}. Crucially, as observed in recent foundational studies on compact architectures \cite{21}, naively downscaling standard architectures via uniform width or depth multipliers leads to erratic representational capacity, gradient instability, and disproportionate performance collapse \cite{21, 24}.
+However, edge deployment imposes uncompromising physical constraints: strict inference latency windows, severely constrained Random Access Memory (RAM), low thermal design power (TDP), and limited on-chip arithmetic hardware \cite{9, 25}. To accommodate mobile and decentralized environments, the vision community introduced lightweight architectural designs \cite{22} (detailed in Section~\ref{sec:related_work}), including depthwise separable convolutions \cite{11, 27}. Yet, the overwhelming majority of these ``efficient'' models predominantly inhabit a mobile-scale budget of 2 to 20 million parameters. In contrast, the sub-1M parameter regime ($<1,000,000$ parameters) remains fundamentally underexplored in medical imaging, particularly under the practical constraints of small-to-medium institutional datasets \cite{3, 16}. Crucially, as observed in recent foundational studies on compact architectures \cite{16}, naively downscaling standard architectures via uniform width or depth multipliers leads to erratic representational capacity, gradient instability, and disproportionate performance collapse \cite{16, 19}.
 
-This investigation is motivated by the absence of systematic benchmarks, architectural insights, and deployment guidelines for deep learning models operating under a strict sub-1M parameter ceiling in neuro-oncological imaging. We posit that as the parameter budget is aggressively constrained, architectural topology---specifically how parameters are structurally allocated to capture multi-scale context without parameter redundancy---matters far more than sheer parameter volume \cite{21}. While multi-path atrous (dilated) depthwise convolutions have emerged as a premier mechanism for expanding effective receptive fields without parameter inflation \cite{5, 21}, their behavior, domain robustness, and failure mechanics under clinical distribution shifts have never been systematically characterized.
+This investigation is motivated by the absence of systematic benchmarks, architectural insights, and deployment guidelines for deep learning models operating under a strict sub-1M parameter ceiling in neuro-oncological imaging. We posit that as the parameter budget is aggressively constrained, architectural topology---specifically how parameters are structurally allocated to capture multi-scale context without parameter redundancy---matters far more than sheer parameter volume \cite{16}. While multi-path atrous (dilated) depthwise convolutions have emerged as a premier mechanism for expanding effective receptive fields without parameter inflation \cite{5, 16}, their behavior, domain robustness, and failure mechanics under clinical distribution shifts have never been systematically characterized.
 
 To address these foundational questions, this work presents a systematic empirical evaluation of deep learning models operating under a strict sub-1M parameter budget across representative neuro-oncological imaging tasks. Our empirical findings uncover two fundamental phenomena:
 \begin{enumerate}
@@ -65,7 +66,7 @@ To address these foundational questions, this work presents a systematic empiric
 \item \textbf{Cross-Dataset Multi-Scale Vulnerability}: When evaluated under out-of-domain clinical shifts, this saturation breaks. We find that compact models relying on parallel atrous convolutions become brittle under input scale perturbations, with predictive uncertainty concentrating along ambiguous lesion boundaries.
 \end{enumerate}
 
-In resource-constrained healthcare environments, resorting to larger models or heavy ensemble backbones to mitigate domain fragility is practically impermissible due to strict latency and memory limits \cite{21, 41}. Instead, we show that this residual accuracy gap can be recovered far more efficiently at inference time by leveraging the model's own architectural inductive biases. To this end, we introduce \textbf{Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}. Rather than performing costly, unconditional multi-view inference across every image \cite{4, 47}, MCG-TTA monitors prediction uncertainty and selectively triggers targeted scale augmentations that align with the network's internal receptive field structure only when scale disagreement is detected, requiring zero additional learned parameters.
+In resource-constrained healthcare environments, resorting to larger models or heavy ensemble backbones to mitigate domain fragility is practically impermissible due to strict latency and memory limits \cite{9, 16}. Instead, we show that this residual accuracy gap can be recovered far more efficiently at inference time by leveraging the model's own architectural inductive biases. To this end, we introduce \textbf{Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}. Rather than performing costly, unconditional multi-view inference across every image \cite{4, 35}, MCG-TTA monitors prediction uncertainty and selectively triggers targeted scale augmentations that align with the network's internal receptive field structure only when scale disagreement is detected, requiring zero additional learned parameters.
 
 Extensive evaluations confirm that uncertainty-aware test-time calibration stabilizes compact representations under distribution shifts while preserving patient-level diagnostic reliability. These results demonstrate that architecture-informed inference calibration offers a practical, hardware-friendly alternative to model scaling for clinical edge artificial intelligence.
 
@@ -77,34 +78,32 @@ In summary, the principal contributions of this work are:
 \end{itemize}
 
 
-\section{Architectural Trends and Related Work}
+\section{Related Work}
+\label{sec:related_work}
 
 Deep neural networks have catalyzed significant progress in medical computer vision, yet their deployment in real-time neuro-oncology remains severely hindered by the compute, memory, and latency bottlenecks of prevailing architectures. In this section, we review relevant literature across dominant architectural paradigms, examining their mathematical foundations, adoption in brain MRI diagnosis, and intrinsic operational limitations on resource-constrained clinical hardware.
 
-\subsection{Increasing Depth with Residuals in Brain MRI}
-As convolutional neural networks grew deeper, optimization became increasingly hindered by vanishing and exploding gradients, as well as degradation where accuracy saturates and abruptly drops. He \emph{et~al.} \cite{14} resolved this degradation phenomenon with the Residual Network (ResNet), introducing identity shortcut connections that allow forward activations and backward error signals to bypass parameterized convolutional layers without attenuation. In clinical neuro-oncology, deep residual architectures---predominantly ResNet-18, ResNet-50, and ResNet-101---have established themselves as the standard backbone across tumor detection, multi-class classification, and histologic glioma grading \cite{10, 38, 54, 55}. Extensive surveys by Litjens \emph{et~al.} \cite{10}, Lundervold and Lundervold \cite{54}, and Nayak \emph{et~al.} \cite{55} demonstrate that transfer learning from ImageNet-pretrained ResNet-50 models yields near-saturated diagnostic accuracies exceeding 98\% on standard multi-class MRI benchmarks, such as the Nickparvar dataset \cite{34} and Figshare.
+\subsection{Residual Networks and the Computational Cost of Scale}
+As convolutional neural networks grew deeper, optimization became increasingly hindered by vanishing and exploding gradients, as well as degradation where accuracy saturates and abruptly drops. He \emph{et~al.} \cite{10} resolved this degradation phenomenon with the Residual Network (ResNet), introducing identity shortcut connections that allow forward activations and backward error signals to bypass parameterized convolutional layers without attenuation. In clinical neuro-oncology, deep residual architectures---predominantly ResNet-18, ResNet-50, and ResNet-101---have established themselves as the standard backbone across tumor detection, multi-class classification, and histologic glioma grading \cite{7, 28, 38, 39}. Extensive surveys by Litjens \emph{et~al.} \cite{7} and Lundervold and Lundervold \cite{38}, together with benchmark studies such as Nayak \emph{et~al.} \cite{39}, demonstrate that deep CNNs---via ImageNet transfer learning or custom architectures---achieve near-saturated diagnostic accuracies (97.5--100\%) on multi-class brain MRI benchmarks \cite{39}, a saturation regime also consistently reproduced on public cohorts such as the Nickparvar dataset \cite{26}.
 
-Despite their high benchmark accuracy, deep residual networks introduce acute operational liabilities in clinical practice. In original architectural specifications and comprehensive benchmarks by He \emph{et~al.} \cite{14} and Bianco \emph{et~al.} \cite{60}, standard ResNet-50 contains approximately 25.56 million parameters, requiring roughly 98 to 102 megabytes of storage for uncompressed single-precision weights alone, while VGG-16 \cite{39} comprises upwards of 138 million parameters (and over 27 million even when dense classification heads are trimmed). In terms of arithmetic complexity, a standard single-image forward pass through ResNet-50 requires 3.8 to 4.1 GFLOPs (roughly 3.86 to 4.09 GMACs) \cite{14, 60}, whereas VGG-16 demands over 15.3 GMACs (exceeding 30 GFLOPs) \cite{39, 60}. As documented in comprehensive hardware surveys by Mittal \emph{et~al.} \cite{33} and Amin \emph{et~al.} \cite{56}, hospital workstations and portable intra-operative scanners rely primarily on general-purpose central processing units (CPUs) or low-power embedded processors lacking high-end enterprise GPU acceleration. On such resource-constrained hardware, deep residual backbones encounter severe latency bottlenecks: empirical benchmarking across embedded and edge platforms by Bianco \emph{et~al.} \cite{60} reveals that ResNet-50 is throttled to under 19 frames per second, with single-image inference latency frequently exceeding 50 to 80 milliseconds on unaccelerated consumer CPUs \cite{33, 60, 61}. For clinical 3D MRI examinations containing hundreds of volumetric slices across multiple modalities (T1, T1Gd, T2, FLAIR) \cite{2, 28}, this computational overhead translates into cumulative multi-second delays per patient, impeding emergency neuro-triage and interactive intra-operative navigation. Furthermore, as demonstrated by Ma \emph{et~al.} \cite{32}, the multi-branch bottleneck topology of ResNets incurs substantial Memory Access Cost (MAC) and off-chip DRAM memory traffic, generating severe cache thrashing that causes real-world hardware execution time to deviate unfavorably from theoretical FLOP estimates.
+Despite their high benchmark accuracy, deep residual networks introduce acute operational liabilities in clinical practice. In original architectural specifications and comprehensive benchmarks by He \emph{et~al.} \cite{10} and Bianco \emph{et~al.} \cite{43}, standard ResNet-50 contains approximately 25.56 million parameters, requiring roughly 98 to 102 megabytes of storage for uncompressed single-precision weights alone, while VGG-16 \cite{29} comprises upwards of 138 million parameters (and over 27 million even when dense classification heads are trimmed). In terms of arithmetic complexity, a standard single-image forward pass through ResNet-50 requires 3.8 to 4.1 GFLOPs (roughly 3.86 to 4.09 GMACs) \cite{10, 43}, whereas VGG-16 demands over 15.3 GMACs (exceeding 30 GFLOPs) \cite{29, 43}. As documented in a comprehensive survey of deep learning on CPUs by Mittal \emph{et~al.} \cite{25}---with deployment constraints similarly noted in neuro-oncology imaging surveys \cite{40}---hospital workstations and portable intra-operative scanners rely primarily on general-purpose central processing units (CPUs) or low-power embedded processors lacking high-end enterprise GPU acceleration. On such resource-constrained hardware, deep residual backbones encounter severe latency bottlenecks: empirical benchmarking across embedded and edge platforms by Bianco \emph{et~al.} \cite{43} reveals that ResNet-50 is throttled to under 19 frames per second, with single-image inference latency frequently exceeding 50 to 80 milliseconds on unaccelerated consumer CPUs \cite{25, 44}. For clinical 3D MRI examinations containing hundreds of volumetric slices across multiple modalities (T1, T1Gd, T2, FLAIR) \cite{2, 23, 45}, this computational overhead translates into cumulative multi-second delays per patient, impeding emergency neuro-triage and interactive intra-operative navigation. Furthermore, empirical profiling demonstrates that the multi-branch bottleneck topology of ResNets incurs substantial Memory Access Cost (MAC) and off-chip DRAM memory traffic, generating severe cache thrashing that causes real-world hardware execution time to deviate unfavorably from theoretical FLOP estimates \cite{25}.
 
-\subsection{The Depthwise Separable Convolution Paradigm}
-To provide computationally lightweight models capable of real-time execution on constrained hardware, Howard \emph{et~al.} \cite{15} proposed MobileNet, replacing standard spatial convolutions with depthwise separable convolutions. This decomposition decouples spatial filtering from channel mixing: a depthwise convolution applies a single spatial kernel per input channel, followed by a $1\times1$ pointwise convolution that linearly combines features across channels. For $3\times3$ kernels, this factorization achieves an 8- to 9-fold reduction in arithmetic operations with minimal loss of representational capacity. Sandler \emph{et~al.} \cite{37} introduced MobileNetV2, pioneering the inverted residual block with a linear bottleneck. Unlike conventional residual blocks that compress feature dimensions before spatial convolution, MobileNetV2 expands low-dimensional input features to a higher-dimensional intermediate space using pointwise convolutions, performs spatial depthwise filtering, and subsequently projects features back to a lower-dimensional manifold via a linear bottleneck to prevent non-linear activation collapse. MobileNetV3 \cite{19} enhanced this framework by pairing neural architecture search (NAS) \cite{50} with hardware-aware optimization, integrating hard-swish non-linearities and selective Squeeze-and-Excitation (SE) channel recalibration blocks \cite{16} to dynamically reweight feature maps according to global context.
+\subsection{Factorized Convolutions: Inverted Residuals and Linear Bottlenecks}
+To provide computationally lightweight models capable of real-time execution on constrained hardware, depthwise separable convolutions were popularized by Chollet \cite{13} in Xception and generalized by Howard \emph{et~al.} \cite{11} in MobileNet. This decomposition decouples spatial filtering from channel mixing: a depthwise convolution applies a single spatial kernel per input channel, followed by a $1\times1$ pointwise convolution that linearly combines features across channels. For $3\times3$ kernels, this factorization achieves an 8- to 9-fold reduction in arithmetic operations with minimal loss of representational capacity. Sandler \emph{et~al.} \cite{27} introduced MobileNetV2, pioneering the inverted residual block with a linear bottleneck. Unlike conventional residual blocks that compress feature dimensions before spatial convolution, MobileNetV2 expands low-dimensional input features to a higher-dimensional intermediate space using pointwise convolutions, performs spatial depthwise filtering, and subsequently projects features back to a lower-dimensional manifold via a linear bottleneck to prevent non-linear activation collapse. MobileNetV3 \cite{14} enhanced this framework by pairing neural architecture search (NAS) \cite{36} with hardware-aware optimization, integrating hard-swish non-linearities and selective Squeeze-and-Excitation (SE) channel recalibration blocks \cite{12} to dynamically reweight feature maps according to global context.
 
-\subsection{Compound Scaling}
-The EfficientNet family \cite{40} was formulated to systematically balance accuracy and computational demand by rethinking network scaling. Prior works typically scaled a single dimension---either network depth, channel width, or input image resolution---in isolation. Tan and Le demonstrated that these three dimensions are fundamentally interdependent and introduced a principled compound scaling method that uniformly scales depth, width, and resolution using a fixed compound coefficient, effectively constraining target multiply-accumulate operations (MACs). EfficientNet-B0 serves as the baseline, operating at 5.3 million parameters and 0.39 GMACs \cite{40}. To resolve training latency bottlenecks and reduce memory overhead, EfficientNetV2 \cite{41} incorporated Fused-MBConv blocks, replacing early depthwise separable blocks with standard $3\times3$ convolutions to better exploit hardware acceleration and memory locality on modern CPUs and GPUs, while employing progressive learning strategies.
+\subsection{Principles of Compound Network Scaling}
+The EfficientNet family \cite{30} was formulated to systematically balance accuracy and computational demand by rethinking network scaling. Prior works typically scaled a single dimension---either network depth, channel width, or input image resolution---in isolation. Tan and Le demonstrated that these three dimensions are fundamentally interdependent and introduced a principled compound scaling method that uniformly scales depth, width, and resolution using a fixed compound coefficient, effectively constraining target multiply-accumulate operations (MACs). EfficientNet-B0 serves as the baseline, operating at 5.3 million parameters and 0.39 GMACs \cite{30}. To resolve training latency bottlenecks and reduce memory overhead, EfficientNetV2 \cite{31} incorporated Fused-MBConv blocks, replacing early depthwise separable blocks with standard $3\times3$ convolutions to better exploit hardware acceleration and memory locality on modern CPUs and GPUs, while employing progressive learning strategies.
 
-\subsection{Hardware-Aware Shuffling and Feature Reuse}
-Aiming directly at hardware runtime rather than indirect FLOP metrics, Ma \emph{et~al.} \cite{32} developed ShuffleNetV2 based on four hardware-aware design principles: maintaining equal input and output channel widths to minimize memory access cost, minimizing excessive group convolutions, reducing network branching, and eliminating element-wise additions. ShuffleNetV2 divides input channels into two paths via a channel split layer, conducts depthwise convolutions along one path, concatenates the resulting branches, and applies a channel shuffle operation to facilitate cross-group feature exchange without matrix multiplication. Complementarily, GhostNet \cite{13} further reduced computational redundancy by observing that feature maps often contain mutual similarities; it generates a compact set of intrinsic feature maps via standard convolution and synthesizes remaining ``ghost'' features through computationally inexpensive linear depthwise operations.
+\subsection{Vision Transformers and Modernized Convolutional Networks}
+Moving beyond pure convolutional inductive biases, the Vision Transformer (ViT) \cite{6} tokenizes images into discrete coordinate patches and applies global self-attention mechanisms \cite{33}. While ViTs exhibit exceptional representational capacity when pre-trained on web-scale datasets, their lack of translational equivariance and local inductive priors makes them notoriously prone to severe overfitting when trained from scratch on small-to-medium-scale medical cohorts \cite{19}. Furthermore, the quadratic computational complexity of pairwise global self-attention with respect to token length imposes prohibitive latency and memory footprints during high-resolution volumetric MRI processing \cite{6, 46}. Motivated by transformer advancements, Liu \emph{et~al.} \cite{24} introduced ConvNeXt, modernizing classic ResNets by incorporating large $7\times7$ kernels, inverted bottleneck designs, depthwise convolutions, and LayerNorm to achieve transformer-competitive performance while retaining the hardware efficiency and simplicity of ConvNets. ConvNeXt V2 \cite{34} combined this architecture with masked autoencoders and global response normalization to stabilize feature representation learning.
 
-\subsection{Attention and Modernized ConvNets}
-Moving beyond pure convolutional inductive biases, the Vision Transformer (ViT) \cite{8} tokenizes images into discrete coordinate patches and applies global self-attention mechanisms \cite{43}. While ViTs exhibit exceptional representational capacity when pre-trained on web-scale datasets, their lack of translational equivariance and local inductive priors makes them notoriously prone to severe overfitting when trained from scratch on small-to-medium-scale medical cohorts \cite{24}. Furthermore, the quadratic computational complexity of pairwise global self-attention with respect to token length imposes prohibitive latency and memory footprints during high-resolution volumetric MRI processing \cite{26}. Motivated by transformer advancements, Liu \emph{et~al.} \cite{30} introduced ConvNeXt, modernizing classic ResNets by incorporating large $7\times7$ kernels, inverted bottleneck designs, depthwise convolutions, and LayerNorm to achieve transformer-competitive performance while retaining the hardware efficiency and simplicity of ConvNets. ConvNeXt V2 \cite{46} combined this architecture with masked autoencoders and global response normalization to stabilize feature representation learning.
+\subsection{Multi-Scale Feature Representation and Dilated Convolutions}
+Discriminating diffuse intracranial tumor boundaries, perifocal vasogenic edema, and necrotic cores requires capturing spatial context across heterogeneous scales \cite{2, 23, 39}. Standard CNNs capture multi-scale context by progressively downsampling feature maps, sacrificing spatial boundary precision. In contrast, atrous (dilated) convolutions \cite{5} expand the effective receptive field without spatial resolution reduction or parameter inflation by introducing an integer dilation rate that spaces out kernel filter weights. Chen \emph{et~al.} \cite{5} popularized this concept through Atrous Spatial Pyramid Pooling (ASPP) in DeepLab, deploying parallel atrous convolutional branches with distinct dilation rates to capture multi-scale representations simultaneously. Kyrkou and Theocharides \cite{17} utilized multi-scale atrous fusion in EmergencyNet to achieve real-time aerial classification. Building upon these principles, Kyrkou \cite{16} introduced LiteSpeed-Net (LS-Net), demonstrating that multi-path atrous convolutions provide a potent inductive bias for compact vision models operating under a sub-1M parameter budget: by splitting channels across parallel depthwise branches with dilation rates of 1, 2, and 3, LS-Net achieves broad multi-scale receptive field coverage while maintaining high inference speed. However, multi-path atrous convolutions suffer from an unaddressed vulnerability in clinical neuro-imaging: because dilated kernels sample the spatial grid at rigid, discrete intervals without spatial interpolation \cite{5, 16}, their predictions become disproportionately fragile under input scale variations and cross-institution acquisition shifts, such as varying slice thickness and lesion zoom levels.
 
-\subsection{Multi-Scale Receptive Fields and Atrous Convolutions}
-Discriminating diffuse intracranial tumor boundaries, perifocal vasogenic edema, and necrotic cores requires capturing spatial context across heterogeneous scales \cite{2, 28, 55}. Standard CNNs capture multi-scale context by progressively downsampling feature maps, sacrificing spatial boundary precision. In contrast, atrous (dilated) convolutions \cite{5} expand the effective receptive field without spatial resolution reduction or parameter inflation by introducing an integer dilation rate that spaces out kernel filter weights. Chen \emph{et~al.} \cite{5} popularized this concept through Atrous Spatial Pyramid Pooling (ASPP) in DeepLab, deploying parallel atrous convolutional branches with distinct dilation rates to capture multi-scale representations simultaneously. Kyrkou and Theocharides \cite{22} utilized multi-scale atrous fusion in EmergencyNet to achieve real-time aerial classification. Building upon these principles, Kyrkou \cite{21} introduced LiteSpeed-Net (LS-Net), demonstrating that multi-path atrous convolutions provide a potent inductive bias for compact vision models operating under a sub-1M parameter budget: by splitting channels across parallel depthwise branches with dilation rates of 1, 2, and 3, LS-Net achieves broad multi-scale receptive field coverage while maintaining high inference speed. However, multi-path atrous convolutions suffer from an unaddressed vulnerability in clinical neuro-imaging: because dilated kernels sample the spatial grid at rigid, discrete intervals without spatial interpolation \cite{5, 21}, their predictions become disproportionately fragile under input scale variations and cross-institution acquisition shifts, such as varying slice thickness and lesion zoom levels.
+\subsection{Test-Time Augmentation and Aleatoric Uncertainty Estimation}
+In safety-critical clinical applications, deep models must communicate predictive uncertainty alongside raw class scores \cite{7, 41}. In neuro-oncology MRI, diagnostic ambiguity arises from anatomical heterogeneity, scanner noise, and indistinct lesion margins---collectively defined as data-dependent aleatoric uncertainty \cite{4, 35}. Seminal works by Ayhan and Berens \cite{4} and Wang \emph{et~al.} \cite{35} demonstrated that Test-Time Augmentation (TTA) provides an effective Monte Carlo sampling framework to estimate aleatoric uncertainty without requiring Bayesian retraining. By applying a distribution of stochastic geometric and photometric transformations to a query slice at test time and averaging the resulting predictions, TTA smooths the decision boundary and yields calibrated uncertainty estimates \cite{4, 35, 42}. Nevertheless, conventional TTA introduces a severe computational bottleneck for edge deployment: running an unselective multi-view ensemble (e.g., 6 to 8 forward passes per image) multiplies inference latency by an equivalent linear factor \cite{42}. In clinical edge workflows, executing an unconditional multi-view TTA scales latency linearly with the number of augmentation passes, completely negating the execution speedups attained through compact architecture design \cite{35, 42}. Furthermore, as shown by Shanmugam \emph{et~al.} \cite{42}, unconditionally augmenting unambiguous high-confidence samples can distort canonical anatomical orientations, inadvertently corrupting diagnostic accuracy.
 
-\subsection{Test-Time Augmentation and Uncertainty Calibration}
-In safety-critical clinical applications, deep models must communicate predictive uncertainty alongside raw class scores \cite{10, 57}. In neuro-oncology MRI, diagnostic ambiguity arises from anatomical heterogeneity, scanner noise, and indistinct lesion margins---collectively defined as data-dependent aleatoric uncertainty \cite{4, 47}. Seminal works by Ayhan and Berens \cite{4} and Wang \emph{et~al.} \cite{47} demonstrated that Test-Time Augmentation (TTA) provides an effective Monte Carlo sampling framework to estimate aleatoric uncertainty without requiring Bayesian retraining. By applying a distribution of stochastic geometric and photometric transformations to a query slice at test time and averaging the resulting predictions, TTA smooths the decision boundary and yields calibrated uncertainty estimates \cite{4, 47, 58}. Nevertheless, conventional TTA introduces a severe computational bottleneck for edge deployment: running an unselective multi-view ensemble (e.g., 6 to 8 forward passes per image) multiplies inference latency by an equivalent linear factor \cite{58}. In clinical edge workflows, executing an unconditional multi-view TTA scales latency linearly with the number of augmentation passes, completely negating the execution speedups attained through compact architecture design \cite{47, 58}. Furthermore, as shown by Shanmugam \emph{et~al.} \cite{58}, unconditionally augmenting unambiguous high-confidence samples can distort canonical anatomical orientations, inadvertently corrupting diagnostic accuracy.
-
-\subsection{Main Limitations and Research Gaps}
+\subsection{Critical Gaps in Edge Neuro-Oncological Vision}
 A critical synthesis of existing literature exposes three fundamental voids that motivate this investigation. First, prior medical imaging studies focus almost exclusively either on overparameterized backbones exceeding 20 million parameters (ResNet-50, VGG-16) or mobile-scale models (2M to 20M parameters). The strict sub-1M parameter regime ($<1,000,000$ parameters)---which represents the critical threshold for low-power microcontroller deployment, zero-latency caching, and localized hospital workstation integration---remains unbenchmarked across in-domain classification and out-of-domain clinical grading. Second, while parallel atrous convolutions achieve high efficiency on saturated in-domain benchmarks, their discrete sampling mechanics induce acute vulnerability to cross-dataset scale shifts, where diagnostic errors concentrate in low-confidence predictions near lesion boundaries. Third, existing test-time augmentation pipelines operate as unselective, brute-force ensembles that impose prohibitive latency penalties. No prior methodology leverages predictive uncertainty to selectively trigger TTA while matching the test-time transformations to the internal multi-scale receptive fields of compact atrous architectures.
 
 To resolve these limitations, this paper establishes a systematic sub-1M benchmark on brain MRI diagnosis and introduces Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA), recovering out-of-domain clinical accuracy with zero additional learned parameters while preserving edge-level inference speed.
@@ -112,7 +111,7 @@ To resolve these limitations, this paper establishes a systematic sub-1M benchma
 
 \section{Methodology: Uncertainty-Gated Multi-Scale Inference (MCG-TTA)}
 
-Motivated by the computational and latency constraints of clinical edge devices \cite{12, 25, 26}, and the observation that compact convolutional architectures relying on parallel dilated convolutions can exhibit sensitivity to input scale variations \cite{5, 21}, this work introduces \textbf{Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}. The underlying hypothesis is that scale-induced ambiguity in compact multi-dilation models concentrates in low-confidence predictions, and that these predictions can be dynamically stabilized at inference time by probing the model with multi-scale views aligned with its internal dilation structure---requiring zero additional learned parameters.
+Motivated by the computational and latency constraints of clinical edge devices \cite{9, 20, 21}, and the observation that compact convolutional architectures relying on parallel dilated convolutions can exhibit sensitivity to input scale variations \cite{5, 16}, this work introduces \textbf{Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}. The underlying hypothesis is that scale-induced ambiguity in compact multi-dilation models concentrates in low-confidence predictions, and that these predictions can be dynamically stabilized at inference time by probing the model with multi-scale views aligned with its internal dilation structure---requiring zero additional learned parameters.
 
 In this section, we formulate the general image classification problem and base model representation, analyze the theoretical scale sensitivity of compact atrous convolutions, present the formal algorithmic pipeline of MCG-TTA across its three decision stages, derive an analytical edge latency model, and define the volumetric patient-level diagnostic aggregation.
 
@@ -131,7 +130,7 @@ p_{\max} = \max_{c \in \{1, \dots, K\}} p_c
 \end{equation}
 with initial predicted class $c_0 = \arg\max_c p_c$.
 
-To support execution on resource-constrained hardware, we adopt a compact multi-scale convolutional architecture as the base backbone (specifically LiteSpeed-Net \cite{21}). The backbone incorporates multi-path atrous (dilated) depthwise convolutions (MPAC blocks \cite{21}) to expand the effective receptive field without parameter inflation, allowing the network to capture both local tissue textures and broader anatomical context.
+To support execution on resource-constrained hardware, we adopt a compact multi-scale convolutional architecture as the base backbone (specifically LiteSpeed-Net \cite{16}). As illustrated in Fig.~\ref{fig:lsnet-architecture}, the backbone incorporates multi-path atrous (dilated) depthwise convolutions (MPAC blocks \cite{16}) to expand the effective receptive field without parameter inflation, allowing the network to capture both local tissue textures and broader anatomical context.
 
 \begin{figure*}[t]
 \centering\includegraphics[width=0.88\textwidth]{figures/lsnet_architecture.pdf}
@@ -142,9 +141,9 @@ To support execution on resource-constrained hardware, we adopt a compact multi-
 
 While atrous convolutions provide an efficient mechanism for expanding the receptive field without downsampling feature resolutions \cite{5}, their discrete sampling mechanics introduce a distinct structural vulnerability under input distribution shifts.
 
-An atrous convolution with dilation rate $d > 1$ samples input features on a sparse regular lattice with stride $d$. In deep, overparameterized architectures, the resulting sparse sampling artifacts---often referred to as the \emph{gridding effect} \cite{5}---are mitigated by dozens of subsequent parameterized layers that continuously blend feature maps across deep residual stages. In contrast, compact vision models designed for low-power edge environments \cite{21} possess limited parameter depth, restricting their capacity to interpolate across discrete spatial sampling gaps.
+An atrous convolution with dilation rate $d > 1$ samples input features on a sparse regular lattice with stride $d$. In deep, overparameterized architectures, the resulting sparse sampling artifacts---often referred to as the \emph{gridding effect} \cite{5}---are mitigated by dozens of subsequent parameterized layers that continuously blend feature maps across deep residual stages. In contrast, compact vision models designed for low-power edge environments \cite{16} possess limited parameter depth, restricting their capacity to interpolate across discrete spatial sampling gaps.
 
-When deployed across clinical environments with differing acquisition settings---such as variations in slice thickness, scanner geometry, or lesion physical dimensions---pathological margins undergo spatial scale shifts relative to the training distribution. Consequently, fixed dilated sampling points can misalign with fine anatomical boundaries, such as thin infiltrative borders or micro-structural margins \cite{5, 21}.
+When deployed across clinical environments with differing acquisition settings---such as variations in slice thickness, scanner geometry, or lesion physical dimensions---pathological margins undergo spatial scale shifts relative to the training distribution. Consequently, fixed dilated sampling points can misalign with fine anatomical boundaries, such as thin infiltrative borders or micro-structural margins \cite{5, 16}.
 
 Based on these observations, we formulate two design principles:
 \begin{enumerate}
@@ -154,7 +153,7 @@ Based on these observations, we formulate two design principles:
 
 \subsection{Proposed Method: Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}
 
-To improve inference robustness while strictly bounding computational overhead, we formulate \textbf{Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}. Rather than applying test-time augmentation unconditionally across all inputs---which scales inference latency linearly with the number of views \cite{58}---MCG-TTA dynamically routes samples through a three-stage decision pipeline.
+To improve inference robustness while strictly bounding computational overhead, we formulate \textbf{Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA)}. Rather than applying test-time augmentation unconditionally across all inputs---which scales inference latency linearly with the number of views \cite{42}---MCG-TTA dynamically routes samples through a three-stage decision pipeline, as depicted in Fig.~\ref{fig:mcg-tta}.
 
 \begin{figure*}[t]
 \centering\includegraphics[width=0.85\textwidth]{figures/mcg_tta.pdf}
@@ -194,7 +193,7 @@ The unified calibrated posterior vector $\bar{\mathbf{p}}$ is defined as:
 \end{cases}
 \label{eq:mcg_aggregation}
 \end{equation}
-The final slice-level diagnosis is given by $\hat{y} = \arg\max_c \bar{p}_c$. The complete procedure is formalized in Algorithm~\ref{alg:mcg_tta}.
+The final slice-level diagnosis is given by $\hat{y} = \arg\max_c \bar{p}_c$. The complete procedure is formalized in Algorithm~1.
 
 \begin{table}[h]
 \centering
@@ -241,7 +240,7 @@ The expected relative latency factor $\lambda = \frac{\mathbb{E}[T]}{T_{\text{ba
 \subsubsection{Latency Bounds and Parameter Invariance}
 \begin{itemize}
 \item \textbf{Single-Pass Inference}: Executes a single forward pass with constant relative latency $\lambda_{\text{base}} = 1.0$.
-\item \textbf{Unconditional Multi-View TTA}: Executes all $|\mathcal{V}|$ views uniformly across all samples, incurring a constant overhead factor $\lambda_{\text{full}} = |\mathcal{V}|$ \cite{58}.
+\item \textbf{Unconditional Multi-View TTA}: Executes all $|\mathcal{V}|$ views uniformly across all samples, incurring a constant overhead factor $\lambda_{\text{full}} = |\mathcal{V}|$ \cite{42}.
 \item \textbf{MCG-TTA}: Bounded by $\lambda \le 1 + \gamma \cdot (|\mathcal{V}| - 1)$. As long as most inputs are confident ($\gamma \ll 1$) and exhibit scale agreement ($\beta \ll 1$), $\lambda$ remains close to unity, avoiding the prohibitive $|\mathcal{V}|\times$ multiplication of brute-force TTA.
 \end{itemize}
 
@@ -260,14 +259,15 @@ Mean-probability aggregation integrates contextual evidence across the volumetri
 
 
 \section{Experiments and Results}
+\label{sec:experiments}
 
-To evaluate performance, the proposed LiteSpeed-Net (LS-Net) architecture and the Multi-Scale Consistency Gated Test-Time Augmentation (MCG-TTA) framework are compared with established deep learning models commonly utilized for image classification and medical image diagnosis. Following the comparative methodology established in compact vision architecture studies \cite{21}, we evaluate both overparameterized baselines and compact models constrained to a strict sub-1M parameter budget ($<10^6$ parameters). Overparameterized baselines comprise widely adopted backbones across computer vision and medical neuro-imaging: ResNet-50 and ResNet-18 \cite{14}, VGG-16 \cite{39}, EfficientNet-B0 \cite{40}, and MobileNet-V2 \cite{37}, evaluated under standard ImageNet transfer-learning and fine-tuning protocols \cite{10, 54, 55}. Sub-1M architectures include scaled-down variants---ResNet-Tiny, EfficientNet-Tiny, and MobileNet-Tiny---alongside the proposed compact multi-path atrous architecture LS-Net \cite{21}, all trained strictly from scratch under identical hyperparameter conditions. All models are evaluated across both in-domain multi-tumor classification and out-of-domain multi-sequence clinical glioma grading to assess diagnostic accuracy, edge inference speed, cross-cohort robustness, and test-time calibration.
+Following the comparative methodology established in compact vision architecture studies \cite{16}, we evaluate both overparameterized baselines and compact models constrained to a strict sub-1M parameter budget ($<10^6$ parameters). Overparameterized baselines comprise widely adopted backbones across computer vision and medical neuro-imaging: ResNet-50 and ResNet-18 \cite{10}, VGG-16 \cite{29}, EfficientNet-B0 \cite{30}, and MobileNet-V2 \cite{27}, evaluated under standard ImageNet transfer-learning and fine-tuning protocols \cite{7, 38, 39}. Sub-1M architectures include scaled-down variants---ResNet-Tiny, EfficientNet-Tiny, and MobileNet-Tiny---alongside the proposed compact multi-path atrous architecture LS-Net \cite{16}, all trained strictly from scratch under identical hyperparameter conditions. All models are evaluated across both in-domain multi-tumor classification and out-of-domain multi-sequence clinical glioma grading to assess diagnostic accuracy, edge inference speed, cross-cohort robustness, and test-time calibration.
 
 \subsection{Benchmark Suite}
 
-To perform an investigation of the architectural landscape and assess the clinical efficacy of compact deep neural networks, experiments are conducted across two neuro-oncological MRI benchmarks representing distinct diagnostic regimes. The first benchmark is the Nickparvar multi-class brain tumor dataset \cite{34}, comprising 7,023 primary 2D axial, coronal, and sagittal T1-weighted contrast-enhanced (T1ce) brain MRI slices distributed across four mutually exclusive categories: glioma, meningioma, pituitary tumor, and normal brain tissue (no tumor). The dataset exhibits balanced class representations and serves as an established benchmark for automated intracranial lesion classification \cite{34, 55}. To ensure rigorous evaluation, the dataset is partitioned into a fixed split of 70\% training, 15\% validation, and 15\% testing, yielding a fixed independent test cohort of 1,052 images. All models are evaluated across three random seeds (seeds 42, 123, and 456), reporting the mean and standard deviation on this fixed test set.
+To perform an investigation of the architectural landscape and assess the clinical efficacy of compact deep neural networks, experiments are conducted across two neuro-oncological MRI benchmarks representing distinct diagnostic regimes. The first benchmark is the Nickparvar multi-class brain tumor dataset \cite{26}, comprising 7,023 primary 2D axial, coronal, and sagittal T1-weighted contrast-enhanced (T1ce) brain MRI slices distributed across four mutually exclusive categories: glioma, meningioma, pituitary tumor, and normal brain tissue (no tumor). The dataset exhibits balanced class representations and serves as an established benchmark for automated intracranial lesion classification \cite{26}. To ensure rigorous evaluation, the dataset is partitioned into a fixed split of 70\% training, 15\% validation, and 15\% testing, yielding a fixed independent test cohort of 1,052 images. All models are evaluated across three random seeds (seeds 42, 123, and 456), reporting the mean and standard deviation on this fixed test set.
 
-To evaluate model resilience under realistic clinical domain shifts, experiments are further conducted on the multimodal Brain Tumor Segmentation (BraTS 2020) benchmark \cite{2, 28}. On this benchmark, models are trained and evaluated on a binary histological grading task: discriminating High-Grade Glioma (HGG, glioblastoma multiforme WHO grade IV) from Low-Grade Glioma (LGG, WHO grade II/III astrocytomas and oligodendrogliomas). Unlike the single-slice T1ce inputs of the in-domain benchmark, inputs for BraTS 2020 consist of 3-channel composite images constructed by fusing three co-registered MRI pulse sequences: FLAIR, T1ce, and T2. The evaluation cohort comprises 56 unseen diagnostic subjects providing 1,400 multi-parametric axial slices (25 diagnostic slices per patient spanning the core lesion volume). This clinical benchmark introduces significant real-world challenges, including an acute $\sim 4:1$ class imbalance reflecting clinical prevalence, substantial multi-institutional acquisition shifts (differing scanner manufacturers, field strengths, and slice thicknesses \cite{2}), and diffuse infiltrative margins.
+To evaluate model resilience under realistic clinical domain shifts, experiments are further conducted on the multimodal Brain Tumor Segmentation (BraTS 2020) benchmark \cite{2, 23, 45}. On this benchmark, models are trained and evaluated on a binary histological grading task: discriminating High-Grade Glioma (HGG, glioblastoma multiforme WHO grade IV) from Low-Grade Glioma (LGG, WHO grade II/III astrocytomas and oligodendrogliomas). Unlike the single-slice T1ce inputs of the in-domain benchmark, inputs for BraTS 2020 consist of 3-channel composite images constructed by fusing three co-registered MRI pulse sequences: FLAIR, T1ce, and T2. The evaluation cohort comprises 56 unseen diagnostic subjects providing 1,400 multi-parametric axial slices (25 diagnostic slices per patient spanning the core lesion volume). This clinical benchmark introduces significant real-world challenges, including an acute $\sim 4:1$ class imbalance reflecting clinical prevalence, substantial multi-institutional acquisition shifts (differing scanner manufacturers, field strengths, and slice thicknesses \cite{2}), and diffuse infiltrative margins.
 
 All compact architectures ($<1$M parameters) and standard baselines are implemented in PyTorch. For the in-domain Nickparvar benchmark, compact models are trained strictly from scratch with an initial learning rate $\eta_0 = 10^{-3}$ ($0.001$), while overparameterized baselines (ResNet-50, VGG-16, EfficientNet-B0) are initialized with standard ImageNet-1K pretrained weights and fine-tuned with $\eta_0 = 10^{-4}$ ($0.0001$). For the BraTS 2020 grading task, models are trained and fine-tuned separately on multi-sequence BraTS data with $\eta_0 = 10^{-4}$ for 30 epochs; no four-class pretraining weights are transferred. Across all experiments, training is conducted using the AdamW optimizer with weight decay $10^{-4}$, employing a cosine annealing learning rate scheduler and batch size of 32 for 30 epochs with early stopping (patience = 7; extended CNN baselines train up to 50 epochs). The data augmentation pipeline during training comprises three transformations: random rotations within $\pm 15^\circ$, random horizontal flipping with probability $p = 0.5$, and elastic deformations with probability $p = 0.15$. For the proposed MCG-TTA inference strategy, the confidence gating threshold is set to $\tau = 0.85$, the multi-scale probe perturbation factor is $\delta = 0.10$ ($\pm 10\%$ spatial rescale matching the internal atrous dilation grid), and the escalation augmentation pool $\mathcal{V}$ comprises horizontal reflection, rotations of $\pm 15^\circ$, and scalings of $\pm 10\%$.
 
@@ -279,18 +279,20 @@ Accuracy results of the proposed LS-Net model and competing architectures on the
 
 \begin{table*}[t]
 \caption{In-Domain Performance and Edge Efficiency on Nickparvar (4-Class MRI)}\label{tab:nickparvar}
-\centering\scriptsize
-\resizebox{\textwidth}{!}{\begin{tabular}{llrrrrrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{4.5pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{llcccccccc}
 \toprule
-Architecture & Paradigm & Parameters & GFLOPs & Latency (ms) & Throughput (FPS) & Accuracy (\%) & Macro F1 (\%) & Specificity (\%) & AUC (\%) \\
+Architecture & Paradigm & Params & GFLOPs & \begin{tabular}[c]{@{}c@{}}Latency\\(ms)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Throughput\\(FPS)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Accuracy\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Macro F1\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Specificity\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}AUC-ROC\\(\%)\end{tabular} \\
 \midrule
-\textbf{ResNet-50} \cite{14} & Full / Fine-tune & 23.52M & 8.17 & 67.89 & 14.7 & $\mathbf{99.14 \pm 0.16}$ & $\mathbf{99.15 \pm 0.17}$ & $99.71 \pm 0.06$ & $99.92 \pm 0.05$ \\
-\textbf{EfficientNet-B0} \cite{40} & Full / Fine-tune & 4.01M & 0.77 & 23.91 & 41.8 & $99.08 \pm 0.28$ & $99.08 \pm 0.27$ & $99.70 \pm 0.09$ & $\mathbf{99.97 \pm 0.02}$ \\
-\textbf{VGG-16} \cite{39} & Full / Fine-tune & 27.56M & 30.72 & 150.03 & 6.7 & $98.86 \pm 0.10$ & $98.86 \pm 0.10$ & $99.62 \pm 0.03$ & $99.94 \pm 0.03$ \\
-\textbf{ResNet-18} \cite{14} & Full / Fine-tune & 11.18M & 3.63 & 27.96 & 35.8 & $98.70 \pm 0.47$ & $98.70 \pm 0.47$ & $99.57 \pm 0.16$ & $99.94 \pm 0.02$ \\
-\textbf{MobileNet-V2} \cite{37} & Full / Fine-tune & 2.23M & 0.60 & 17.35 & 57.6 & $98.45 \pm 0.33$ & $98.45 \pm 0.33$ & $99.48 \pm 0.11$ & $99.95 \pm 0.03$ \\
+\textbf{ResNet-50} \cite{10} & Full / Fine-tune & 23.52M & 8.17 & 67.89 & 14.7 & $\mathbf{99.14 \pm 0.16}$ & $\mathbf{99.15 \pm 0.17}$ & $99.71 \pm 0.06$ & $99.92 \pm 0.05$ \\
+\textbf{EfficientNet-B0} \cite{30} & Full / Fine-tune & 4.01M & 0.77 & 23.91 & 41.8 & $99.08 \pm 0.28$ & $99.08 \pm 0.27$ & $99.70 \pm 0.09$ & $\mathbf{99.97 \pm 0.02}$ \\
+\textbf{VGG-16} \cite{29} & Full / Fine-tune & 27.56M & 30.72 & 150.03 & 6.7 & $98.86 \pm 0.10$ & $98.86 \pm 0.10$ & $99.62 \pm 0.03$ & $99.94 \pm 0.03$ \\
+\textbf{ResNet-18} \cite{10} & Full / Fine-tune & 11.18M & 3.63 & 27.96 & 35.8 & $98.70 \pm 0.47$ & $98.70 \pm 0.47$ & $99.57 \pm 0.16$ & $99.94 \pm 0.02$ \\
+\textbf{MobileNet-V2} \cite{27} & Full / Fine-tune & 2.23M & 0.60 & 17.35 & 57.6 & $98.45 \pm 0.33$ & $98.45 \pm 0.33$ & $99.48 \pm 0.11$ & $99.95 \pm 0.03$ \\
 \midrule
-\textbf{LS-Net} \cite{21} & Compact / Scratch & \textbf{0.91M} & \textbf{0.36} & \textbf{11.30} & \textbf{88.5} & $\mathbf{98.29 \pm 0.25}$ & $\mathbf{98.29 \pm 0.25}$ & $99.43 \pm 0.08$ & $99.79 \pm 0.08$ \\
+\textbf{LS-Net} \cite{16} & Compact / Scratch & \textbf{0.91M} & \textbf{0.36} & \textbf{11.30} & \textbf{88.5} & $\mathbf{98.29 \pm 0.25}$ & $\mathbf{98.29 \pm 0.25}$ & $99.43 \pm 0.08$ & $99.79 \pm 0.08$ \\
 \textbf{EfficientNet-Tiny} & Compact / Scratch & 0.75M & 0.19 & 16.14 & 61.9 & $98.13 \pm 0.38$ & $98.14 \pm 0.38$ & $99.38 \pm 0.13$ & $99.85 \pm 0.04$ \\
 \textbf{ResNet-Tiny} & Compact / Scratch & 0.98M & 2.51 & 24.19 & 41.3 & $97.72 \pm 0.17$ & $97.72 \pm 0.16$ & $99.24 \pm 0.05$ & $99.78 \pm 0.03$ \\
 \textbf{MobileNet-Tiny} & Compact / Scratch & 0.40M & 0.12 & 11.43 & 87.5 & $97.65 \pm 0.14$ & $97.67 \pm 0.14$ & $99.22 \pm 0.05$ & $99.78 \pm 0.04$ \\
@@ -298,7 +300,7 @@ Architecture & Paradigm & Parameters & GFLOPs & Latency (ms) & Throughput (FPS) 
 \end{tabular}}
 \end{table*}
 
-Among the sub-1M compact models trained from scratch, LS-Net establishes the superior accuracy-latency trade-off. While EfficientNet-Tiny achieves lower theoretical arithmetic operations (0.19 GFLOPs vs. 0.36 GFLOPs), its sequential inverted bottleneck operations and Squeeze-and-Excitation mechanisms incur higher real-world runtime latency (16.14 ms, 61.9 FPS) than LS-Net (11.30 ms, 88.5 FPS) due to memory fragmentation and kernel scheduling overheads \cite{32}. ResNet-Tiny exhibits the heaviest computational burden among compact variants (2.51 GFLOPs, 24.19 ms) due to dense residual convolutions, yet trails LS-Net by 0.57 pp in accuracy (97.72\% vs. 98.29\%). MobileNet-Tiny attains high throughput (87.5 FPS) at 0.40M parameters, but yields the lowest overall accuracy (97.65\%), demonstrating that aggressive channel pruning without multi-scale receptive field expansion compromises discriminative capacity.
+Among the sub-1M compact models trained from scratch, LS-Net establishes the superior accuracy-latency trade-off. While EfficientNet-Tiny achieves lower theoretical arithmetic operations (0.19 GFLOPs vs. 0.36 GFLOPs), its sequential inverted bottleneck operations and Squeeze-and-Excitation mechanisms incur higher real-world runtime latency (16.14 ms, 61.9 FPS) than LS-Net (11.30 ms, 88.5 FPS) due to memory fragmentation and kernel scheduling overheads \cite{25}. ResNet-Tiny exhibits the heaviest computational burden among compact variants (2.51 GFLOPs, 24.19 ms) due to dense residual convolutions, yet trails LS-Net by 0.57 pp in accuracy (97.72\% vs. 98.29\%). MobileNet-Tiny attains high throughput (87.5 FPS) at 0.40M parameters, but yields the lowest overall accuracy (97.65\%), demonstrating that aggressive channel pruning without multi-scale receptive field expansion compromises discriminative capacity.
 
 \subsection{Cross-Dataset Generalization and Clinical Grading}
 
@@ -306,20 +308,22 @@ While in-domain benchmark evaluations demonstrate near-parity between compact an
 
 \begin{table*}[t]
 \caption{Cross-Dataset Generalization and Clinical Grading on BraTS 2020}\label{tab:brats}
-\centering\scriptsize
-\resizebox{\textwidth}{!}{\begin{tabular}{lrrrrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{7pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{lcccccccc}
 \toprule
-Model & Parameters & Slice F1 (\%) & Slice Acc (\%) & Slice AUC (\%) & Patient F1 (\%) & Patient Acc (\%) & LGG Patient Recall (Caught / 12) \\
+Model & Params & \begin{tabular}[c]{@{}c@{}}Slice F1\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Slice Acc\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Slice AUC\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Patient F1\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Patient Acc\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}LGG Patient Recall\\(Caught / 12)\end{tabular} \\
 \midrule
-\textbf{VGG-16} \cite{39} & 27.56M & $\mathbf{89.31 \pm 0.06}$ & $\mathbf{92.57 \pm 0.10}$ & $\mathbf{96.25 \pm 0.93}$ & $\mathbf{92.34 \pm 3.33}$ & $\mathbf{94.64}$ & $\mathbf{11.0 / 12\ (91.7\%)}$ \\
-\textbf{ResNet-50} \cite{14} & 23.52M & $84.76 \pm 0.86$ & $89.65 \pm 1.21$ & $94.85 \pm 0.54$ & $87.91 \pm 1.10$ & 91.96 & $9.5 / 12\ (79.2\%)$ \\
+\textbf{VGG-16} \cite{29} & 27.56M & $\mathbf{89.31 \pm 0.06}$ & $\mathbf{92.57 \pm 0.10}$ & $\mathbf{96.25 \pm 0.93}$ & $\mathbf{92.34 \pm 3.33}$ & $\mathbf{94.64}$ & $\mathbf{11.0 / 12\ (91.7\%)}$ \\
+\textbf{ResNet-50} \cite{10} & 23.52M & $84.76 \pm 0.86$ & $89.65 \pm 1.21$ & $94.85 \pm 0.54$ & $87.91 \pm 1.10$ & 91.96 & $9.5 / 12\ (79.2\%)$ \\
 \textbf{ResNet-Tiny} & 0.98M & $84.57 \pm 2.92$ & $90.07 \pm 1.92$ & $94.71 \pm 1.14$ & $84.68 \pm 2.33$ & 90.18 & $8.5 / 12\ (70.8\%)$ \\
-\textbf{EfficientNet-B0} \cite{40} & 4.01M & $84.46 \pm 0.99$ & $88.90 \pm 0.15$ & $94.82 \pm 1.01$ & $90.04 \pm 3.17$ & 92.86 & $\mathbf{11.0 / 12\ (91.7\%)}$ \\
+\textbf{EfficientNet-B0} \cite{30} & 4.01M & $84.46 \pm 0.99$ & $88.90 \pm 0.15$ & $94.82 \pm 1.01$ & $90.04 \pm 3.17$ & 92.86 & $\mathbf{11.0 / 12\ (91.7\%)}$ \\
 \midrule
 \textbf{MCG-TTA (proposed)} & \textbf{0.91M} & $\mathbf{83.45 \pm 2.07}$ & $\mathbf{88.83 \pm 1.04}$ & $\mathbf{90.74 \pm 3.20}$ & $\mathbf{88.15 \pm 1.83}$ & \textbf{91.97} & $\mathbf{10.0 / 12\ (83.3\%)}$ \\
-\textbf{LS-Net (base)} \cite{21} & \textbf{0.91M} & $82.02 \pm 2.36$ & $88.25 \pm 0.86$ & $89.82 \pm 4.29$ & $89.33 \pm 0.92$ & 92.86 & $10.0 / 12\ (83.3\%)$ \\
-\textbf{ResNet-18} \cite{14} & 11.18M & $81.08 \pm 1.05$ & $85.75 \pm 0.16$ & $93.46 \pm 1.04$ & $80.88 \pm 1.29$ & 85.71 & $10.0 / 12\ (83.3\%)$ \\
-\textbf{MobileNet-V2} \cite{37} & 2.23M & $78.87 \pm 1.15$ & $85.32 \pm 0.76$ & $91.21 \pm 0.46$ & $79.40 \pm 3.64$ & 85.71 & $8.5 / 12\ (70.8\%)$ \\
+\textbf{LS-Net (base)} \cite{16} & \textbf{0.91M} & $82.02 \pm 2.36$ & $88.25 \pm 0.86$ & $89.82 \pm 4.29$ & $89.33 \pm 0.92$ & 92.86 & $10.0 / 12\ (83.3\%)$ \\
+\textbf{ResNet-18} \cite{10} & 11.18M & $81.08 \pm 1.05$ & $85.75 \pm 0.16$ & $93.46 \pm 1.04$ & $80.88 \pm 1.29$ & 85.71 & $10.0 / 12\ (83.3\%)$ \\
+\textbf{MobileNet-V2} \cite{27} & 2.23M & $78.87 \pm 1.15$ & $85.32 \pm 0.76$ & $91.21 \pm 0.46$ & $79.40 \pm 3.64$ & 85.71 & $8.5 / 12\ (70.8\%)$ \\
 \textbf{EfficientNet-Tiny} & 0.75M & $76.00 \pm 1.03$ & $80.78 \pm 0.60$ & $89.09 \pm 0.49$ & $80.38 \pm 5.67$ & 83.93 & $\mathbf{11.5 / 12\ (95.8\%)}$ \\
 \textbf{MobileNet-Tiny} & 0.40M & $68.89 \pm 5.36$ & $74.68 \pm 5.50$ & $82.57 \pm 6.44$ & $71.09 \pm 4.69$ & 76.79 & $9.0 / 12\ (75.0\%)$ \\
 \bottomrule
@@ -336,10 +340,12 @@ To evaluate the mechanisms governing MCG-TTA's performance gains and edge runtim
 
 \begin{table*}[t]
 \caption{Ablation of Test-Time Augmentation (TTA) Strategies on LS-Net (BraTS 2020)}\label{tab:ablation}
-\centering\scriptsize
-\resizebox{\textwidth}{!}{\begin{tabular}{llrrrrrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.3}
+\setlength{\tabcolsep}{6pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{llcccccccc}
 \toprule
-Strategy & Description / Gating Rule & Trigger Rate (\%) & Extra Forwards / Trigger & Modelled Latency (ms) & Relative Latency & Slice F1 (s42 / s123) (\%) & Mean Slice F1 (\%) & Mean Patient F1 (\%) & LGG Patient Recall \\
+Strategy & Description / Decision Rule & \begin{tabular}[c]{@{}c@{}}Trigger\\Rate (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Extra Passes\\/ Trigger\end{tabular} & \begin{tabular}[c]{@{}c@{}}Latency\\(ms)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Relative\\Latency\end{tabular} & \begin{tabular}[c]{@{}c@{}}Slice F1 (s42 / s123)\\(\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Mean Slice\\F1 (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Patient\\F1 (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}LGG Recall\\(Cases / 24)\end{tabular} \\
 \midrule
 \textbf{LS-Net (Base)} & Single standard forward pass & 0.0\% & 0.0 & \textbf{5.60} & \textbf{1.00$\times$} & 83.69 / 80.35 & 82.02 & \textbf{89.34} & 20 / 24 \\
 \midrule
@@ -360,27 +366,29 @@ While accuracy results indicate that compact models are competitive, evaluating 
 
 \begin{table*}[t]
 \caption{Edge Hardware Profiling and Computational Complexity}\label{tab:edge}
-\centering\scriptsize
-\resizebox{\textwidth}{!}{\begin{tabular}{llrrrrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{6pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{llccccccc}
 \toprule
-Model Class & Architecture & Parameters (M) & Disk Size (MB) & FLOPs (GFLOPs) & MACs (GMACs) & Latency Batch=1 (ms) & Throughput (FPS) & Speedup vs ResNet-50 \\
+Model Class & Architecture & \begin{tabular}[c]{@{}c@{}}Params\\(M)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Disk Size\\(MB)\end{tabular} & \begin{tabular}[c]{@{}c@{}}FLOPs\\(GFLOPs)\end{tabular} & \begin{tabular}[c]{@{}c@{}}MACs\\(GMACs)\end{tabular} & \begin{tabular}[c]{@{}c@{}}CPU Latency\\$B=1$ (ms)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Throughput\\(FPS)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Speedup vs.\\ResNet-50\end{tabular} \\
 \midrule
-\textbf{Heavyweight Baselines} & \textbf{VGG-16} \cite{39} & 27.56M & 105.14 & 30.72 & 15.36 & 150.03 & 6.7 & 0.45$\times$ \\
-& \textbf{ResNet-50} \cite{14} & 23.52M & 89.71 & 8.17 & 4.09 & 67.89 & 14.7 & 1.00$\times$ (Ref) \\
-& \textbf{ResNet-18} \cite{14} & 11.18M & 42.64 & 3.63 & 1.81 & 27.96 & 35.8 & 2.43$\times$ \\
-& \textbf{EfficientNet-B0} \cite{40} & 4.01M & 15.31 & 0.77 & 0.39 & 23.91 & 41.8 & 2.84$\times$ \\
-& \textbf{MobileNet-V2} \cite{37} & 2.23M & 8.50 & 0.60 & 0.30 & 17.35 & 57.6 & 3.91$\times$ \\
+\textbf{Heavyweight Baselines} & VGG-16 \cite{29} & 27.56M & 105.14 & 30.72 & 15.36 & 150.03 & 6.7 & 0.45$\times$ \\
+& ResNet-50 \cite{10} & 23.52M & 89.71 & 8.17 & 4.09 & 67.89 & 14.7 & 1.00$\times$ (Ref) \\
+& ResNet-18 \cite{10} & 11.18M & 42.64 & 3.63 & 1.81 & 27.96 & 35.8 & 2.43$\times$ \\
+& EfficientNet-B0 \cite{30} & 4.01M & 15.31 & 0.77 & 0.39 & 23.91 & 41.8 & 2.84$\times$ \\
+& MobileNet-V2 \cite{27} & 2.23M & 8.50 & 0.60 & 0.30 & 17.35 & 57.6 & 3.91$\times$ \\
 \midrule
-\textbf{Compact Models ($<1$M)} & \textbf{ResNet-Tiny} & 0.98M & 3.72 & 2.51 & 1.26 & 24.19 & 41.3 & 2.81$\times$ \\
-& \textbf{MCG-TTA (proposed)} & \textbf{0.91M} & \textbf{3.49} & \textbf{$\sim$0.68} & \textbf{$\sim$0.34} & \textbf{21.47} & \textbf{46.6} & \textbf{3.16$\times$} \\
-& \textbf{EfficientNet-Tiny} & 0.75M & 2.88 & 0.19 & 0.09 & 16.14 & 61.9 & 4.21$\times$ \\
-& \textbf{MobileNet-Tiny} & 0.40M & 1.53 & 0.12 & 0.06 & 11.43 & 87.5 & 5.94$\times$ \\
-& \textbf{LS-Net (base)} \cite{21} & \textbf{0.91M} & \textbf{3.49} & \textbf{0.36} & \textbf{0.18} & \textbf{11.30} & \textbf{88.5} & \textbf{6.01$\times$} \\
+\textbf{Compact Models ($<1$M)} & ResNet-Tiny & 0.98M & 3.72 & 2.51 & 1.26 & 24.19 & 41.3 & 2.81$\times$ \\
+& \textbf{MCG-TTA (proposed)} & \textbf{0.91M} & \textbf{3.49} & $\mathbf{\sim 0.68}$ & $\mathbf{\sim 0.34}$ & \textbf{21.47} & \textbf{46.6} & $\mathbf{3.16\times}$ \\
+& EfficientNet-Tiny & 0.75M & 2.88 & 0.19 & 0.09 & 16.14 & 61.9 & 4.21$\times$ \\
+& MobileNet-Tiny & 0.40M & 1.53 & 0.12 & 0.06 & 11.43 & 87.5 & 5.94$\times$ \\
+& \textbf{LS-Net (base)} \cite{16} & \textbf{0.91M} & \textbf{3.49} & \textbf{0.36} & \textbf{0.18} & \textbf{11.30} & \textbf{88.5} & $\mathbf{6.01\times}$ \\
 \bottomrule
 \end{tabular}}
 \end{table*}
 
-The profiling results demonstrate that theoretical FLOP counts alone fail to predict real-world hardware runtime, consistent with the architectural insights demonstrated by Kyrkou \cite{21}. Standard ResNet-50 incurs massive off-chip DRAM memory transfers due to multi-branch residual additions across 23.52M weights (89.71 MB memory footprint). This generates severe cache thrashing, capping throughput at 14.7 FPS. In contrast, LS-Net requires only 3.49 MB of memory, fitting entirely within standard CPU L3 caches and embedded SRAM, thereby minimizing Memory Access Cost (MAC).
+The profiling results demonstrate that theoretical FLOP counts alone fail to predict real-world hardware runtime, consistent with the architectural insights demonstrated by Kyrkou \cite{16}. Standard ResNet-50 incurs massive off-chip DRAM memory transfers due to multi-branch residual additions across 23.52M weights (89.71 MB memory footprint). This generates severe cache thrashing, capping throughput at 14.7 FPS. In contrast, LS-Net requires only 3.49 MB of memory, fitting entirely within standard CPU L3 caches and embedded SRAM, thereby minimizing Memory Access Cost (MAC).
 
 Furthermore, while MobileNet architectures rely on inverted bottleneck blocks that temporarily expand feature dimensions by an expansion factor $t=6$---inducing intermediate tensor memory spikes---LS-Net avoids expansion bottlenecks by splitting channels across parallel depthwise atrous branches ($d=1, 2, 3$). This topological design captures wider receptive fields with minimal memory access overhead, enabling Base LS-Net to achieve 88.5 FPS (11.30 ms), a $6.01\times$ speedup over ResNet-50. Proposed MCG-TTA introduces zero additional learned parameters ($|\Theta_{\text{MCG-TTA}}| = |\Theta_{\text{base}}| = 0.91\text{M}$), entirely preserving the compact 3.49 MB memory footprint. Accounting for dynamic triggering, MCG-TTA operates at an effective arithmetic complexity of $\sim 0.68$ GFLOPs ($\sim 0.34$ GMACs) and a measured single-slice edge latency of 21.47 ms (46.6 FPS), delivering a $3.16\times$ speedup over ResNet-50 while operating well above the 30 FPS real-time threshold required for live intra-operative scanner navigation.
 
@@ -388,27 +396,29 @@ Furthermore, while MobileNet architectures rely on inverted bottleneck blocks th
 
 To evaluate clinical diagnostic safety across distinct intracranial tumor types, Table~\ref{tab:sensitivity} reports the per-class Macro F1-score breakdown on the Nickparvar 4-class benchmark. Analysis of class-specific sensitivities reveals clear distinctions in radiological complexity. Pituitary adenomas achieve $>99.3\%$ F1 across all architectures (MCG-TTA: 99.52\%, ResNet-50: 99.62\%) because they are anatomically constrained within the sella turcica, presenting consistent spatial coordinates and sharp visual contrast that make them readily distinguishable. Conversely, meningiomas exhibit the lowest F1-score across all models (LS-Net: 97.32\%, MCG-TTA: 97.60\%, ResNet-50: 98.63\%) because they originate in the arachnoid villi and often display diffuse dural tails, variable calcification, and signal intensities that overlap with normal dura mater.
 
-\begin{table}[h]
+\begin{table*}[t]
 \caption{Per-Class Diagnostic Sensitivity Breakdown on Nickparvar 4-Class (\%)}\label{tab:sensitivity}
-\centering\scriptsize
-\resizebox{\columnwidth}{!}{\begin{tabular}{lrrrr}
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{8pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{lcccc}
 \toprule
-Model & Glioma F1 (\%) & Meningioma F1 (\%) \emph{(Hardest)} & No Tumor F1 (\%) & Pituitary F1 (\%) \emph{(Easiest)} \\
+Model & \begin{tabular}[c]{@{}c@{}}Glioma\\F1 (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Meningioma F1 (\%)\\\emph{(Hardest)}\end{tabular} & \begin{tabular}[c]{@{}c@{}}No Tumor\\F1 (\%)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Pituitary F1 (\%)\\\emph{(Easiest)}\end{tabular} \\
 \midrule
-\textbf{ResNet-50} \cite{14} & $99.19 \pm 0.11$ & $98.63 \pm 0.22$ & $99.14 \pm 0.30$ & $99.62 \pm 0.19$ \\
-\textbf{EfficientNet-B0} \cite{40} & $98.94 \pm 0.39$ & $98.69 \pm 0.38$ & $99.27 \pm 0.12$ & $99.43 \pm 0.38$ \\
-\textbf{VGG-16} \cite{39} & $98.87 \pm 0.19$ & $98.39 \pm 0.21$ & $98.81 \pm 0.20$ & $99.37 \pm 0.39$ \\
-\textbf{ResNet-18} \cite{14} & $98.69 \pm 0.49$ & $97.94 \pm 0.65$ & $98.81 \pm 0.53$ & $99.37 \pm 0.29$ \\
+\textbf{ResNet-50} \cite{10} & $99.19 \pm 0.11$ & $98.63 \pm 0.22$ & $99.14 \pm 0.30$ & $99.62 \pm 0.19$ \\
+\textbf{EfficientNet-B0} \cite{30} & $98.94 \pm 0.39$ & $98.69 \pm 0.38$ & $99.27 \pm 0.12$ & $99.43 \pm 0.38$ \\
+\textbf{VGG-16} \cite{29} & $98.87 \pm 0.19$ & $98.39 \pm 0.21$ & $98.81 \pm 0.20$ & $99.37 \pm 0.39$ \\
+\textbf{ResNet-18} \cite{10} & $98.69 \pm 0.49$ & $97.94 \pm 0.65$ & $98.81 \pm 0.53$ & $99.37 \pm 0.29$ \\
 \midrule
-\textbf{LS-Net} \cite{21} & $\mathbf{98.00 \pm 0.39}$ & $\mathbf{97.32 \pm 0.40}$ & $\mathbf{98.35 \pm 0.22}$ & $\mathbf{99.50 \pm 0.39}$ \\
+\textbf{LS-Net} \cite{16} & $\mathbf{98.00 \pm 0.39}$ & $\mathbf{97.32 \pm 0.40}$ & $\mathbf{98.35 \pm 0.22}$ & $\mathbf{99.50 \pm 0.39}$ \\
 \textbf{MCG-TTA (proposed)} & $\mathbf{98.15 \pm 0.18}$ & $\mathbf{97.60 \pm 0.22}$ & $\mathbf{98.42 \pm 0.19}$ & $\mathbf{99.52 \pm 0.09}$ \\
 \bottomrule
 \end{tabular}}
-\end{table}
+\end{table*}
 
 To evaluate whether performance differences between compact models and large backbones are statistically significant on paired sample predictions, McNemar's test with continuity correction ($\chi^2 = (|b - c| - 1)^2 / (b + c)$ for discordant pair counts $b$ and $c$) is computed at significance level $\alpha = 0.05$. On the Pituitary and No-Tumor categories, McNemar's test yields $p > 0.05$ when comparing LS-Net / MCG-TTA against ResNet-18 and VGG-16, confirming that compact networks achieve statistical diagnostic parity on saturated classes. Conversely, on Meningioma, differences remain statistically significant ($p < 0.05$), reflecting the diagnostic challenge of delicate dural boundaries. On this challenging meningioma class, MCG-TTA improves LS-Net F1 from 97.32\% to 97.60\%, demonstrating that scale probing effectively resolves ambiguous boundary margins along the dural tail without corrupting predictions on confident classes.
 
-Qualitative error investigations reveal the fundamental failure mode of compact atrous architectures under domain shift. While parallel atrous convolutions (MPAC blocks \cite{21}) expand the effective receptive field without parameter inflation, their kernels sample features on a sparse regular spatial lattice ($stride = d$). In overparameterized networks (e.g., DeepLab \cite{5}), dozens of subsequent layers interpolate across these sampling gaps. In compact sub-1M networks, however, limited depth restricts cross-grid feature smoothing. When tested on multi-sequence BraTS grading where acquisition zoom and slice thickness vary, fixed dilation rates ($d=1, 2, 3$) can skip fine infiltrating tumor margins or necrotic foci, concentrating errors in low-confidence predictions located precisely at lesion boundaries. By perturbing uncertain predictions by $\pm 10\%$ scale factors, MCG-TTA shifts spatial boundaries across the discrete grid spacing $\Delta x = d$, enabling parallel depthwise branches to re-sample lesion margins along complementary spatial coordinates. When scale predictions agree, triad averaging stabilizes posteriors; when they disagree, targeted escalation resolves ambiguity. This inductive match between test-time transformation and network architecture explains why MCG-TTA successfully recovers up to +1.8 pp slice F1 while preserving clinical low-grade glioma detection at edge speeds.
+Qualitative error investigations reveal the fundamental failure mode of compact atrous architectures under domain shift. While parallel atrous convolutions (MPAC blocks \cite{16}) expand the effective receptive field without parameter inflation, their kernels sample features on a sparse regular spatial lattice ($stride = d$). In overparameterized networks (e.g., DeepLab \cite{5}), dozens of subsequent layers interpolate across these sampling gaps. In compact sub-1M networks, however, limited depth restricts cross-grid feature smoothing. When tested on multi-sequence BraTS grading where acquisition zoom and slice thickness vary, fixed dilation rates ($d=1, 2, 3$) can skip fine infiltrating tumor margins or necrotic foci, concentrating errors in low-confidence predictions located precisely at lesion boundaries. By perturbing uncertain predictions by $\pm 10\%$ scale factors, MCG-TTA shifts spatial boundaries across the discrete grid spacing $\Delta x = d$, enabling parallel depthwise branches to re-sample lesion margins along complementary spatial coordinates. When scale predictions agree, triad averaging stabilizes posteriors; when they disagree, targeted escalation resolves ambiguity. This inductive match between test-time transformation and network architecture explains why MCG-TTA successfully recovers up to +1.8 pp slice F1 while preserving clinical low-grade glioma detection at edge speeds.
 
 
 \section{Discussion}
@@ -427,7 +437,7 @@ These boundaries point to concrete next evaluations: prospective subject-level g
 A strict sub-million-parameter budget does not preclude strong brain MRI image classification: LS-Net obtains 98.29\% four-class accuracy with 0.36 GFLOPs and roughly sixfold lower CPU latency than ResNet-50 for a 0.85-point accuracy difference. The separate BraTS experiment exposes a substantial grading gap and prevents treating benchmark saturation as evidence of general clinical readiness. With the learned model fixed at 0.91M parameters, MCG-TTA raises mean slice F1 from 82.02\% to 83.45\% across the reported two-seed ablation, with a maximum 1.83-point gain, at a modelled 1.92$\times$ base latency. It retains the baseline's 20/24 pooled LGG patient detections but does not improve baseline patient F1. The central lesson is therefore a qualified one: selectively spending inference compute on uncertain, scale-inconsistent inputs can recover some residual slice-level performance without increasing model size, while patient-level utility and clinical deployment require additional validation.
 
 
-\begin{thebibliography}{61}
+\begin{thebibliography}{46}
 
 \bibitem{1}
 M.~Assran, Q.~Duval, I.~Misra, P.~Bojanowski, P.~Vincent, M.~Rabbat, Y.~LeCun, and N.~Ballas, ``Self-supervised learning from images with a joint-embedding predictive architecture,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2023, pp.~15619--15629.
@@ -445,172 +455,127 @@ M.~S. Ayhan and P.~Berens, ``Test-time data augmentation for estimation of heter
 L.-C. Chen, Y.~Zhu, G.~Papandreou, F.~Schroff, and H.~Adam, ``Encoder-decoder with atrous separable convolution for semantic image segmentation,'' in \emph{Proc. Eur. Conf. Comput. Vis. (ECCV)}, 2018, pp.~801--818.
 
 \bibitem{6}
-G.~Cheng, X.~Yuan, X.~Yao, K.~Yan, Q.~Zeng, X.~Xie, and J.~Han, ``Towards large-scale small object detection: Survey and benchmarks,'' \emph{IEEE Trans. Pattern Anal. Mach. Intell.}, vol.~45, no.~11, pp.~13467--13488, Nov. 2023. \doi{10.1109/TPAMI.2023.3284568}
-
-\bibitem{7}
-C.~Cui, T.~Gao, S.~Wei, Y.~Du, R.~Guo, S.~Dong, B.~Lu, Y.~Zhou, X.~Lv, Q.~Liu, \emph{et~al.}, ``PP-LCNet: A lightweight CPU convolutional neural network,'' \emph{arXiv preprint arXiv:2109.15099}, 2021.
-
-\bibitem{8}
 A.~Dosovitskiy, L.~Beyer, A.~Kolesnikov, D.~Weissenborn, X.~Zhai, T.~Unterthiner, M.~Dehghani, M.~Minderer, G.~Heigold, S.~Gelly, J.~Uszkoreit, and N.~Houlsby, ``An image is worth 16x16 words: Transformers for image recognition at scale,'' in \emph{Proc. Int. Conf. Learn. Represent. (ICLR)}, 2021.
 
-\bibitem{9}
-A.~Esteva, B.~Kuprel, R.~A. Novoa, J.~Ko, S.~M. Swetter, H.~M. Blau, and S.~Thrun, ``Dermatologist-level classification of skin cancer with deep neural networks,'' \emph{Nature}, vol.~542, no.~7639, pp.~115--118, 2017. \doi{10.1038/nature21056}
-
-\bibitem{10}
+\bibitem{7}
 G.~Litjens, T.~Kooi, B.~E. Bejnordi, A.~A.~A. Setio, F.~Ciompi, M.~Ghafoorian, J.~A. van~der Laak, B.~van Ginneken, and C.~I. S{\'a}nchez, ``A survey on deep learning in medical image analysis,'' \emph{Med. Image Anal.}, vol.~42, pp.~60--88, Dec. 2017. \doi{10.1016/j.media.2017.07.005}
 
-\bibitem{11}
-M.~Goldblum, H.~Souri, R.~Ni, M.~Shu, V.~Prabhu, G.~Somepalli, P.~Chattopadhyay, M.~Ibrahim, A.~Bardes, J.~Hoffman, \emph{et~al.}, ``Battle of the backbones: A large-scale comparison of pretrained models across computer vision tasks,'' in \emph{Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.~36, 2024.
+\bibitem{8}
+M.~Goldblum, H.~Souri, R.~Ni, M.~Shu, V.~Prabhu, G.~Somepalli, P.~Chattopadhyay, M.~Ibrahim, A.~Bardes, J.~Hoffman, \emph{et~al.}, ``Battle of the backbones: A large-scale comparison of pretrained models across computer vision tasks,'' in \emph{Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.~36, 2023, pp.~29343--29371.
 
-\bibitem{12}
+\bibitem{9}
 H.~Han and J.~Siebert, ``TinyML: A systematic review and synthesis of existing research,'' in \emph{Proc. Int. Conf. Artif. Intell. Inf. Commun. (ICAIIC)}, 2022, pp.~269--274. \doi{10.1109/ICAIIC54071.2022.9722636}
 
-\bibitem{13}
-K.~Han, Y.~Wang, Q.~Tian, J.~Guo, C.~Xu, and C.~Xu, ``GhostNet: More features from cheap operations,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2020, pp.~6808--6817.
-
-\bibitem{14}
+\bibitem{10}
 K.~He, X.~Zhang, S.~Ren, and J.~Sun, ``Deep residual learning for image recognition,'' in \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2016, pp.~770--778.
 
-\bibitem{15}
+\bibitem{11}
 A.~G. Howard, M.~Zhu, B.~Chen, D.~Kalenichenko, W.~Wang, T.~Weyand, M.~Andreetto, and H.~Adam, ``MobileNets: Efficient convolutional neural networks for mobile vision applications,'' \emph{arXiv preprint arXiv:1704.04861}, 2017.
 
-\bibitem{16}
+\bibitem{12}
 J.~Hu, L.~Shen, and G.~Sun, ``Squeeze-and-excitation networks,'' in \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2018, pp.~7132--7141.
 
-\bibitem{17}
+\bibitem{13}
 F.~Chollet, ``Xception: Deep learning with depthwise separable convolutions,'' in \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2017, pp.~1251--1258.
 
-\bibitem{18}
-P.~Jeevan and A.~Sethi, ``WaveMix: Resource-efficient token mixing for images,'' \emph{arXiv preprint arXiv:2203.03689}, 2022.
+\bibitem{14}
+A.~Howard, M.~Sandler, G.~Chu, L.-C. Chen, B.~Chen, M.~Tan, W.~Wang, Y.~Zhu, R.~Pang, V.~Vasudevan, Q.~V. Le, and H.~Adam, ``Searching for MobileNetV3,'' in \emph{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)}, 2019, pp.~1314--1324.
 
-\bibitem{19}
-B.~Koonce, ``MobileNetV3,'' in \emph{Convolutional Neural Networks with Swift for TensorFlow}. Berkeley, CA: Apress, 2021, pp.~125--144.
-
-\bibitem{20}
+\bibitem{15}
 A.~Krizhevsky, I.~Sutskever, and G.~E. Hinton, ``ImageNet classification with deep convolutional neural networks,'' in \emph{Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.~25, 2012, pp.~1097--1105.
 
-\bibitem{21}
+\bibitem{16}
 C.~Kyrkou, ``Rethinking compact ($<$1M) vision models: Balancing accuracy and speed through multi-path atrous convolutions,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) Findings}, 2026, pp.~2710--2720.
 
-\bibitem{22}
-C.~Kyrkou and T.~Theocharides, ``EmergencyNet: Efficient aerial image classification for drone-based emergency monitoring using atrous convolutional feature fusion,'' \emph{IEEE J. Sel. Top. Appl. Earth Observ. Remote Sens.}, vol.~13, pp.~1687--1699, 2020. \doi{10.1109/JSTARS.2020.2985860}
+\bibitem{17}
+C.~Kyrkou and T.~Theocharides, ``EmergencyNet: Efficient aerial image classification for drone-based emergency monitoring using atrous convolutional feature fusion,'' \emph{IEEE J. Sel. Top. Appl. Earth Observ. Remote Sens.}, vol.~13, pp.~1687--1699, 2020. \doi{10.1109/JSTARS.2020.2969809}
 
-\bibitem{23}
+\bibitem{18}
 Y.~LeCun, L.~Bottou, Y.~Bengio, and P.~Haffner, ``Gradient-based learning applied to document recognition,'' \emph{Proc. IEEE}, vol.~86, no.~11, pp.~2278--2324, Nov. 1998. \doi{10.1109/5.726791}
 
-\bibitem{24}
-S.~Lee, S.~Lee, and B.~C. Song, ``Improving vision transformers to learn small-size dataset from scratch,'' \emph{IEEE Access}, vol.~10, pp.~123212--123224, 2022. \doi{10.1109/ACCESS.2022.3223847}
+\bibitem{19}
+S.~Lee, S.~Lee, and B.~C. Song, ``Improving vision transformers to learn small-size dataset from scratch,'' \emph{IEEE Access}, vol.~10, pp.~123212--123224, 2022. \doi{10.1109/ACCESS.2022.3224044}
 
-\bibitem{25}
-J.~Lin, L.~Zhu, W.-M. Chen, W.-C. Wang, and S.~Han, ``Tiny machine learning: Progress and futures,'' \emph{IEEE Circuits Syst. Mag.}, vol.~23, no.~3, pp.~8--34, thirdquarter 2023. \doi{10.1109/MCAS.2023.3302237}
+\bibitem{20}
+J.~Lin, L.~Zhu, W.-M. Chen, W.-C. Wang, and S.~Han, ``Tiny machine learning: Progress and futures,'' \emph{IEEE Circuits Syst. Mag.}, vol.~23, no.~3, pp.~8--34, thirdquarter 2023. \doi{10.1109/MCAS.2023.3302182}
 
-\bibitem{26}
+\bibitem{21}
 D.~Liu, H.~Kong, X.~Luo, W.~Liu, and R.~Subramaniam, ``Bringing AI to edge: From deep learning's perspective,'' \emph{Neurocomputing}, vol.~485, pp.~297--320, 2022. \doi{10.1016/j.neucom.2021.04.141}
 
-\bibitem{27}
-L.~Liu, M.~Pietik{\"a}inen, J.~Qin, W.~Ouyang, and L.~Van~Gool, ``Efficient visual recognition,'' \emph{Int. J. Comput. Vis.}, vol.~128, pp.~1997--2001, 2020. \doi{10.1007/s11263-020-01362-7}
+\bibitem{22}
+L.~Liu, M.~Pietik{\"a}inen, J.~Qin, W.~Ouyang, and L.~Van~Gool, ``Efficient visual recognition,'' \emph{Int. J. Comput. Vis.}, vol.~128, pp.~1997--2001, 2020. \doi{10.1007/s11263-020-01351-w}
 
-\bibitem{28}
+\bibitem{23}
 B.~H. Menze, A.~Jakab, S.~Bauer, J.~Kalpathy-Cramer, K.~Farahani, J.~Kirby, \emph{et~al.}, ``The Multimodal Brain Tumor Image Segmentation Benchmark (BRATS),'' \emph{IEEE Trans. Med. Imag.}, vol.~34, no.~10, pp.~1993--2024, Oct. 2015. \doi{10.1109/TMI.2014.2377694}
 
-\bibitem{29}
-X.~Liu, H.~Peng, N.~Zheng, Y.~Yang, H.~Hu, and Y.~Yuan, ``EfficientViT: Memory efficient vision transformer with cascaded group attention,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2023, pp.~14420--14430.
-
-\bibitem{30}
+\bibitem{24}
 Z.~Liu, H.~Mao, C.-Y. Wu, C.~Feichtenhofer, T.~Darrell, and S.~Xie, ``A ConvNet for the 2020s,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2022, pp.~11976--11986.
 
-\bibitem{31}
-J.-H. Luo and J.~Wu, ``Neural network pruning with residual-connections and limited-data,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2020, pp.~1458--1467.
+\bibitem{25}
+S.~Mittal, P.~Rajput, and S.~Subramoney, ``A survey of deep learning on CPUs: Opportunities and co-optimizations,'' \emph{IEEE Trans. Neural Netw. Learn. Syst.}, vol.~33, no.~10, pp.~5095--5115, Oct. 2022. \doi{10.1109/TNNLS.2021.3071762}
 
-\bibitem{32}
-N.~Ma, X.~Zhang, H.-T. Zheng, and J.~Sun, ``ShuffleNet V2: Practical guidelines for efficient CNN architecture design,'' in \emph{Proc. Eur. Conf. Comput. Vis. (ECCV)}, 2018, pp.~116--131.
-
-\bibitem{33}
-S.~Mittal, P.~Rajput, and S.~Subramoney, ``A survey of deep learning on CPUs: Opportunities and co-optimizations,'' \emph{IEEE Trans. Neural Netw. Learn. Syst.}, vol.~33, no.~10, pp.~5095--5115, Oct. 2022. \doi{10.1109/TNNLS.2021.3073719}
-
-\bibitem{34}
+\bibitem{26}
 M.~Nickparvar, ``Brain Tumor MRI Dataset,'' Kaggle, 2021. [Online]. Available: \url{https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset}
 
-\bibitem{35}
-N.~Rieke, J.~Hancox, W.~Li, F.~Milletar{\`\i}, H.~R. Roth, S.~Albarqouni, \emph{et~al.}, ``The future of digital health with federated learning,'' \emph{NPJ Digit. Med.}, vol.~3, no.~1, p.~119, 2020. \doi{10.1038/s41746-020-00323-1}
-
-\bibitem{36}
-M.~Rahimzadeh, S.~Parvin, A.~Askari, E.~Safi, and M.~R. Mohammadi, ``Wise-SRNet: A novel architecture for enhancing image classification by learning spatial resolution of feature maps,'' \emph{Pattern Anal. Applic.}, vol.~27, no.~2, p.~30, 2024. \doi{10.1007/s10044-024-01254-1}
-
-\bibitem{37}
+\bibitem{27}
 M.~Sandler, A.~Howard, M.~Zhu, A.~Zhmoginov, and L.-C. Chen, ``MobileNetV2: Inverted residuals and linear bottlenecks,'' in \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2018, pp.~4510--4520.
 
-\bibitem{38}
+\bibitem{28}
 D.~Shen, G.~Wu, and H.-I. Suk, ``Deep learning in medical image analysis,'' \emph{Annu. Rev. Biomed. Eng.}, vol.~19, pp.~221--248, 2017. \doi{10.1146/annurev-bioeng-071516-044442}
 
-\bibitem{39}
+\bibitem{29}
 K.~Simonyan and A.~Zisserman, ``Very deep convolutional networks for large-scale image recognition,'' in \emph{Proc. Int. Conf. Learn. Represent. (ICLR)}, 2015.
 
-\bibitem{40}
+\bibitem{30}
 M.~Tan and Q.~V. Le, ``EfficientNet: Rethinking model scaling for convolutional neural networks,'' in \emph{Proc. Int. Conf. Mach. Learn. (ICML)}, 2019, pp.~6105--6114.
 
-\bibitem{41}
+\bibitem{31}
 M.~Tan and Q.~V. Le, ``EfficientNetV2: Smaller models and faster training,'' in \emph{Proc. Int. Conf. Mach. Learn. (ICML)}, 2021, pp.~10096--10106.
 
-\bibitem{42}
-G.~Varoquaux, A.~S. Luccioni, and M.~Whittaker, ``Hype, sustainability, and the price of the bigger-is-better paradigm in AI,'' \emph{arXiv preprint arXiv:2409.14160}, 2024.
+\bibitem{32}
+G.~Varoquaux, A.~S. Luccioni, and M.~Whittaker, ``Hype, sustainability, and the price of the bigger-is-better paradigm in AI,'' in \emph{Proc. ACM Conf. Fairness Account. Transp. (FAccT)}, 2025, pp.~61--75. \doi{10.1145/3715275.3732006}
 
-\bibitem{43}
+\bibitem{33}
 A.~Vaswani, N.~Shazeer, N.~Parmar, J.~Uszkoreit, L.~Jones, A.~N. Gomez, {\L}.~Kaiser, and I.~Polosukhin, ``Attention is all you need,'' in \emph{Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.~30, 2017, pp.~5998--6008.
 
-\bibitem{44}
-S.~Vats, J.~P. Bhati, A.~Singla, V.~Kukreja, and R.~Sharma, ``Advanced image classification on Intel datasets using optimized EfficientNet and MobileNetV2,'' in \emph{Proc. IEEE 9th Int. Conf. Convergence Technol. (I2CT)}, 2024, pp.~1--4. \doi{10.1109/I2CT61223.2024.10543666}
-
-\bibitem{45}
-C.~Wang, Q.~Liu, Y.~Li, and M.~Gao, ``LightCSPNet: A lightweight network for image classification and objection detection,'' \emph{Int. J. Comput. Intell. Syst.}, vol.~16, no.~1, p.~46, 2023. \doi{10.1007/s44196-023-00224-y}
-
-\bibitem{46}
+\bibitem{34}
 S.~Woo, S.~Debnath, R.~Hu, X.~Chen, Z.~Liu, I.~S. Kweon, and S.~Xie, ``ConvNeXt V2: Co-designing and scaling ConvNets with masked autoencoders,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2023, pp.~16133--16142.
 
-\bibitem{47}
+\bibitem{35}
 G.~Wang, W.~Li, M.~Aertsen, J.~Deprest, S.~Ourselin, and T.~Vercauteren, ``Aleatoric uncertainty estimation with test-time augmentation for medical image segmentation with convolutional neural networks,'' \emph{Neurocomputing}, vol.~338, pp.~34--45, 2019. \doi{10.1016/j.neucom.2019.01.103}
 
-\bibitem{48}
-Z.~Zang, S.~Li, D.~Wu, G.~Wang, K.~Wang, L.~Shang, B.~Sun, H.~Li, and S.~Z. Li, ``DLME: Deep local-flatness manifold embedding,'' in \emph{Proc. Eur. Conf. Comput. Vis. (ECCV)}, 2022, pp.~576--592.
+\bibitem{36}
+M.~Tan, B.~Chen, R.~Pang, V.~Vasudevan, M.~Sandler, A.~Howard, and Q.~V. Le, ``MnasNet: Platform-aware neural architecture search for mobile,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2019, pp.~2820--2828.
 
-\bibitem{49}
-Z.-Q. Zhao, P.~Zheng, S.-T. Xu, and X.~Wu, ``Object detection with deep learning: A review,'' \emph{IEEE Trans. Neural Netw. Learn. Syst.}, vol.~30, no.~11, pp.~3212--3232, Nov. 2019. \doi{10.1109/TNNLS.2018.2876865}
-
-\bibitem{50}
-X.~Zheng, C.~Yang, S.~Zhang, Y.~Wang, B.~Zhang, Y.~Wu, Y.~Wu, L.~Shao, and R.~Ji, ``DDPNAS: Efficient neural architecture search via dynamic distribution pruning,'' \emph{Int. J. Comput. Vis.}, vol.~131, no.~5, pp.~1234--1249, 2023. \doi{10.1007/s11263-023-01760-7}
-
-\bibitem{51}
-Y.~Zhou, S.~Chen, Y.~Wang, and W.~Huan, ``Review of research on lightweight convolutional neural networks,'' in \emph{Proc. IEEE 5th Inf. Technol. Mechatronics Eng. Conf. (ITOEC)}, 2020, pp.~1713--1720. \doi{10.1109/ITOEC49072.2020.9141785}
-
-\bibitem{52}
-F.~Isensee, P.~F. Jaeger, S.~A.~A. Kohl, J.~Petersen, and K.~H. Maier-Hein, ``nnU-Net: A self-configuring method for deep learning-based biomedical image segmentation,'' \emph{Nat. Methods}, vol.~18, no.~2, pp.~203--211, Feb. 2021. \doi{10.1038/s41592-020-01008-z}
-
-\bibitem{53}
+\bibitem{37}
 S.~Ren, K.~He, R.~Girshick, and J.~Sun, ``Faster R-CNN: Towards real-time object detection with region proposal networks,'' \emph{IEEE Trans. Pattern Anal. Mach. Intell.}, vol.~39, no.~6, pp.~1137--1149, Jun. 2017. \doi{10.1109/TPAMI.2016.2577031}
 
-\bibitem{54}
+\bibitem{38}
 A.~S. Lundervold and A.~Lundervold, ``An overview of deep learning in medical imaging focusing on MRI,'' \emph{Z. Med. Phys.}, vol.~29, no.~2, pp.~102--127, May 2019. \doi{10.1016/j.zemedi.2018.11.002}
 
-\bibitem{55}
-D.~R. Nayak, R.~Dash, and B.~Majhi, ``Deep learning for brain tumor detection and classification: A review,'' \emph{Comput. Biol. Med.}, vol.~141, p.~105153, Feb. 2022. \doi{10.1016/j.compbiomed.2021.105153}
+\bibitem{39}
+D.~R. Nayak, R.~Dash, and B.~Majhi, ``Automated diagnosis of multi-class brain abnormalities using MRI images: A deep convolutional neural network based method,'' \emph{Pattern Recognit. Lett.}, vol.~138, pp.~385--391, 2020. \doi{10.1016/j.patrec.2020.04.018}
 
-\bibitem{56}
-J.~Amin, M.~Sharif, A.~Haldorai, M.~Yasmin, and D.~R. Nayak, ``Brain tumor detection and classification using machine learning: A comprehensive review,'' \emph{Complex Intell. Syst.}, vol.~8, no.~4, pp.~3161--3183, 2022. \doi{10.1007/s40747-021-00563-y}
+\bibitem{40}
+J.~Amin, M.~Sharif, A.~Haldorai, M.~Yasmin, and R.~S. Nayak, ``Brain tumor detection and classification using machine learning: A comprehensive survey,'' \emph{Complex Intell. Syst.}, vol.~8, no.~4, pp.~3161--3183, 2022. \doi{10.1007/s40747-021-00563-y}
 
-\bibitem{57}
+\bibitem{41}
 M.~Abdar, F.~Pourpanah, S.~Hussain, D.~Rezazadegan, L.~Liu, M.~Ghavamzadeh, \emph{et~al.}, ``A review of uncertainty quantification in deep learning: Techniques, applications and challenges,'' \emph{Inf. Fusion}, vol.~76, pp.~243--297, Dec. 2021. \doi{10.1016/j.inffus.2021.05.008}
 
-\bibitem{58}
-D.~Shanmugam, D.~Blalock, G.~Balakrishnan, and J.~Guttag, ``When and why test-time augmentation works,'' in \emph{Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.~34, 2021, pp.~21189--21201.
+\bibitem{42}
+D.~Shanmugam, D.~Blalock, G.~Balakrishnan, and J.~Guttag, ``Better aggregation in test-time augmentation,'' in \emph{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)}, 2021, pp.~1214--1223.
 
-\bibitem{59}
-G.~Huang, Z.~Liu, L.~Van~Der~Maaten, and K.~Q. Weinberger, ``Densely connected convolutional networks,'' in \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2017, pp.~4700--4708.
-
-\bibitem{60}
+\bibitem{43}
 S.~Bianco, R.~Cadene, L.~Celona, and P.~Napoletano, ``Benchmark analysis of representative deep neural network architectures,'' \emph{IEEE Access}, vol.~6, pp.~64270--64277, 2018. \doi{10.1109/ACCESS.2018.2877890}
 
-\bibitem{61}
+\bibitem{44}
 A.~Canziani, A.~Paszke, and E.~Culurciello, ``An analysis of deep neural network models for practical applications,'' \emph{arXiv preprint arXiv:1605.07678}, 2016.
+
+\bibitem{45}
+S.~Bakas, M.~Reyes, A.~Jakab, S.~Bauer, M.~Rempfler, A.~Crimi, \emph{et~al.}, ``Identifying the best machine learning algorithms for brain tumor segmentation, progression assessment, and overall survival prediction in the BRATS challenge,'' \emph{arXiv preprint arXiv:1811.02629}, 2018.
+
+\bibitem{46}
+F.~Shamshad, S.~Khan, S.~W. Zamir, M.~H. Khan, M.~Hayat, F.~S. Khan, and H.~Fu, ``Transformers in medical imaging: A survey,'' \emph{Med. Image Anal.}, vol.~88, p.~102802, 2023. \doi{10.1016/j.media.2023.102802}
 
 \end{thebibliography}
 
