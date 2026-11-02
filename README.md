@@ -42,17 +42,53 @@ pip install -r requirements.txt
 > **GPU:** `requirements.txt` cài torch CPU. Trên máy có CUDA, cài thêm bản CUDA tương ứng, ví dụ CUDA 12.1:
 > `pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121`
 
-### 2. Chuẩn bị dữ liệu (cần `~/.kaggle/kaggle.json`)
+### 2. Chuẩn bị dữ liệu
+
+**Cách A — Kaggle API** (cần `~/.kaggle/kaggle.json`):
 ```bash
 python scripts/download_dataset.py   # tải Kaggle dataset -> data/raw
+```
+
+**Cách B — tải thủ công bằng browser** (tài khoản Kaggle miễn phí):
+- Main dataset (raw): https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset — giải nén sao cho `data/raw/` chứa 2 thư mục `Training/` và `Testing/`.
+- Hoặc dùng sẵn file `data.zip` ở repo gốc (~800 MB): giải nén vào root project, kết quả tương đương `data/raw` đầy đủ.
+
+**Cách C — đã copy sẵn `data/processed/*.csv` từ máy khác:** bỏ qua bước này.
+
+Sau khi có `data/raw`, chạy cleaning + split trên máy target:
+```bash
 python scripts/run_cleaning.py       # loại ảnh hỏng/trùng -> data/processed/clean.csv
 python scripts/run_split.py          # stratified 70/15/15 -> train/val/test.csv
 python scripts/run_eda.py            # (tuỳ chọn) hình EDA -> results/figures
 python scripts/verify_pipeline.py    # kiểm tra pipeline
 ```
-Nếu đã copy sẵn `data/processed/*.csv` từ máy khác thì bỏ qua bước này.
 
-### 3. Train (GPU tự detect, chỉnh `training.num_workers` trong `configs/config.yaml` lên 4-8)
+**BraTS 2020** (bài toán grading HGG/LGG, dùng `configs/config_brats.yaml`):
+https://www.kaggle.com/datasets/awsaf49/brats20-dataset-training-validation — giải nén rồi trích xuất slice 2D:
+```bash
+python scripts/prepare_brats.py --src <đường_dẫn_BraTS2020_TrainingData>
+# -> PNG slices: data/external_raw/brats2020/{hgg,lgg}/<subject>/sNNN.png
+# -> manifests : data/external/brats2020/{train,val,test,all}.csv (subject-level split, 25 slice/patient)
+```
+
+### 3. torchvision ImageNet weights (bắt buộc cho lần chạy `train.py` đầu tiên)
+
+Các backbone pretrained sẽ tự download khi có mạng; với máy offline/Restricted thì tải trước và đặt vào cache của torch:
+
+- Linux: `~/.cache/torch/hub/checkpoints/`
+- Windows: `%USERPROFILE%\.cache\torch\hub\checkpoints\`
+
+| File | URL | Used by |
+|---|---|---|
+| `resnet18-f37072fd.pth` | https://download.pytorch.org/models/resnet18-f37072fd.pth | resnet18, mpac_resnet |
+| `resnet50-11ad3fa6.pth` | https://download.pytorch.org/models/resnet50-11ad3fa6.pth | resnet50 |
+| `vgg16-397923af.pth` | https://download.pytorch.org/models/vgg16-397923af.pth | vgg16 |
+| `mobilenet_v2-7ebf99e0.pth` | https://download.pytorch.org/models/mobilenet_v2-7ebf99e0.pth | mobilenetv2 |
+| `efficientnet_b0_rwightman-7f5810bc.pth` | https://download.pytorch.org/models/efficientnet_b0_rwightman-7f5810bc.pth | efficientnetb0 |
+
+> Copy từ máy khác qua USB cũng được — ví dụ thư mục cache có sẵn ở `C:\Users\<user>\.cache\torch\hub\checkpoints`.
+
+### 4. Train (GPU tự detect, chỉnh `training.num_workers` trong `configs/config.yaml` lên 4-8)
 ```bash
 # 1 model
 python scripts/train.py --model resnet50 --epochs 30 --batch-size 32
@@ -69,19 +105,19 @@ python scripts/train.py --model custom_cnn --epochs 1 --debug-batches 5
 ```
 Checkpoints: `models/<model>/{best.pt,last.pt,history.csv}` — TensorBoard: `tensorboard --logdir results/logs`.
 
-### 4. Hyperparameter tuning (top models)
+### 5. Hyperparameter tuning (top models)
 ```bash
 python scripts/tune.py --model resnet50 --trials 8 --epochs 5
 ```
 
-### 5. Đánh giá & so sánh — 1 lệnh cho tất cả models
+### 6. Đánh giá & so sánh — 1 lệnh cho tất cả models
 ```bash
 python scripts/evaluate.py --model all          # eval mọi model có best.pt
 python scripts/evaluate.py --model resnet50,mobilenetv2   # hoặc subset
 python scripts/compare_models.py                # bảng so sánh, McNemar, khuyến nghị
 ```
 
-### 6. Chạy toàn bộ pipeline trong background (train all -> eval all -> compare)
+### 7. Chạy toàn bộ pipeline trong background (train all -> eval all -> compare)
 ```bash
 # Linux/macOS
 nohup python scripts/run_all.py --epochs 30 --batch-size 32 > results/logs/run_all.out 2>&1 &
