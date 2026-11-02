@@ -8,3 +8,7 @@ data/external_raw/
 data/processed/
 results/
 /models/
+
+# Large archives - keep out of git
+data.zip
+paper_checkpoints.zip
