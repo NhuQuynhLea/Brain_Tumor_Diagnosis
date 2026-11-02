@@ -1,10 +1,12 @@
 """Test-time augmentation (TTA) inference.
 
 Modes:
-  full       - every sample gets K views; prob = mean over views
-  selective  - only low-confidence samples (max prob < tau) get the extra views
-  subject    - gate at group level: every slice of a low-confidence subject
-               (mean slice confidence < tau) gets the extra views
+  full    - every sample gets K views; prob = mean over views
+  mcgtta  - Multi-Scale Consistency-Guided TTA: low-confidence samples
+            (max prob < tau) are probed with the scale views and escalate to
+            full multi-view aggregation only when the probes disagree.
+            Mirrors the MPAC block's multi-dilation paths: scale-sensitive
+            inputs are exactly where multi-path fusion is unstable.
 
 All TTA views are deterministic transforms drawn from the same family/limits as
 build_train_transform, so they stay inside the training augmentation envelope.
@@ -80,28 +82,23 @@ def forward_views(model: torch.nn.Module, imgs_rgb: list[np.ndarray],
     return probs
 
 
-STRATEGY_NAMES = ("conf", "subject", "weakclass", "disagree", "scalempac")
+STRATEGY_NAMES = ("mcgtta",)
 
 
-def union_trigger(p0: np.ndarray, df: pd.DataFrame, taus: list[float],
-                  weak_idx: int | None = None) -> np.ndarray:
-    """Rows that ANY selective strategy could enter at ANY tau in the sweep,
-    so a single views pass on this subset serves every simulation."""
-    conf = p0.max(1)
-    pred = p0.argmax(1)
-    m = conf < max(taus)
-    if weak_idx is not None:
-        m |= pred == weak_idx
-    if "subject" in df.columns:
-        sc = pd.Series(conf).groupby(df["subject"].to_numpy()).transform("mean")
-        m |= (sc < max(taus)).to_numpy()
-    return np.where(m)[0]
+def union_trigger(p0: np.ndarray, taus: list[float]) -> np.ndarray:
+    """Rows entering the confidence gate at any tau in the sweep, so a single
+    views pass on this subset serves every tau simulation."""
+    return np.where(p0.max(1) < max(taus))[0]
 
 
-def simulate_strategy(probs_T: np.ndarray, idx_T: np.ndarray, p0: np.ndarray,
-                      df: pd.DataFrame, tau: float, strategy: str,
-                      view_names: list[str], weak_idx: int | None = None):
-    """Replay one strategy's gate/escalation on cached per-row view probs.
+def simulate_mcgtta(probs_T: np.ndarray, idx_T: np.ndarray, p0: np.ndarray,
+                    tau: float, view_names: list[str]):
+    """MCG-TTA (Multi-Scale Consistency-Guided TTA): replayed on cached views.
+
+    Rows with max prob < tau first receive the scale probe views (mirroring
+    the MPAC block's multi-dilation paths). If the probes agree with the base
+    prediction and each other, the final prob is the mean of identity+probes;
+    on disagreement the row escalates to all K views. Non-gated rows keep p0.
 
     probs_T: (T, K, C) probs for rows idx_T (view 0 = identity).
     Returns (probs (N, C), trigger mask (N,), n_extra_forwards, n_escalated).
@@ -115,50 +112,24 @@ def simulate_strategy(probs_T: np.ndarray, idx_T: np.ndarray, p0: np.ndarray,
     t_of_row = -np.ones(n, dtype=int)
     t_of_row[idx_T] = np.arange(len(idx_T))
 
-    if strategy == "subject" and "subject" in df.columns:
-        subj_conf = pd.Series(conf).groupby(df["subject"].to_numpy()).transform("mean")
-        entry = (subj_conf < tau).to_numpy()
-    elif strategy == "weakclass":
-        entry = (conf < tau) | (pred == weak_idx)
-    else:  # conf, disagree, scalempac share the confidence entry gate
-        entry = conf < tau
-    entry &= in_T
-    rows = np.where(entry)[0]
+    rows = np.where((conf < tau) & in_T)[0]
     tt = t_of_row[rows]
 
     probs = p0.copy()
-    n_escalated = 0
-    if strategy in ("conf", "subject", "weakclass"):
-        probs[rows] = probs_T[tt].mean(axis=1)
-        extra = len(rows) * (k - 1)
-    elif strategy == "disagree":
-        probe = view_names.index("hflip")
-        esc = probs_T[tt, probe].argmax(1) != pred[rows]
-        probs[rows[~esc]] = probs_T[tt[~esc]][:, [0, probe]].mean(axis=1)
-        probs[rows[esc]] = probs_T[tt[esc]].mean(axis=1)
-        extra = len(rows) + esc.sum() * (k - 2)
-        n_escalated = int(esc.sum())
-    elif strategy == "scalempac":
-        probes = [i for i, v in enumerate(view_names) if v.startswith("scale")]
-        votes = np.stack([probs_T[tt, v].argmax(1) for v in [0] + probes], axis=1)
-        esc = (votes != pred[rows][:, None]).any(1) | (votes[:, 1:] != votes[:, :1]).any(1)
-        used = [0] + probes
-        probs[rows[~esc]] = probs_T[tt[~esc]][:, used].mean(axis=1)
-        probs[rows[esc]] = probs_T[tt[esc]].mean(axis=1)
-        extra = len(rows) * len(probes) + esc.sum() * (k - 1 - len(probes))
-        n_escalated = int(esc.sum())
-    else:
-        raise ValueError(f"unknown strategy '{strategy}'")
-    return probs, entry, int(extra), n_escalated
+    probes = [i for i, v in enumerate(view_names) if v.startswith("scale")]
+    votes = np.stack([probs_T[tt, v].argmax(1) for v in [0] + probes], axis=1)
+    esc = (votes != pred[rows][:, None]).any(1) | (votes[:, 1:] != votes[:, :1]).any(1)
+    used = [0] + probes
+    probs[rows[~esc]] = probs_T[tt[~esc]][:, used].mean(axis=1)
+    probs[rows[esc]] = probs_T[tt[esc]].mean(axis=1)
+    extra = len(rows) * len(probes) + int(esc.sum()) * (k - 1 - len(probes))
+    return probs, (conf < tau) & in_T, int(extra), int(esc.sum())
 
 
-def run_tta_eval(model, df: pd.DataFrame, cfg, device, mode: str = "selective",
-                 tau: float = 0.8, n_views: int = 5, batch_size: int = 32) -> dict:
-    """Gated TTA over a manifest DataFrame; measures real wall-clock timing.
-
-    Pass 1 runs the identity view on all rows. Triggered rows get views 1..K-1
-    and their final prob is the mean over all K views.
-    """
+def run_tta_eval(model, df: pd.DataFrame, cfg, device, mode: str = "none",
+                 n_views: int = 5, batch_size: int = 32) -> dict:
+    """Plain or full-TTA evaluation over a manifest DataFrame; measures real
+    wall-clock timing. mode: "none" (identity view only) or "full" (all views)."""
     views = build_tta_views(cfg)[:max(1, n_views)]
     n = len(df)
 
@@ -173,15 +144,8 @@ def run_tta_eval(model, df: pd.DataFrame, cfg, device, mode: str = "selective",
 
     probs, trigger = probs0.copy(), np.zeros(n, dtype=bool)
     tta_s = 0.0
-    if mode in ("full", "selective", "subject") and len(views) > 1:
-        conf = probs0.max(1)
-        if mode == "full":
-            idx = np.arange(n)
-        elif mode == "selective":
-            idx = np.where(conf < tau)[0]
-        else:
-            subj_conf = pd.Series(conf).groupby(df["subject"].to_numpy()).transform("mean")
-            idx = np.where((subj_conf < tau).to_numpy())[0]
+    if mode == "full" and len(views) > 1:
+        idx = np.arange(n)
         trigger[idx] = True
         t2 = time.perf_counter()
         if len(idx):
@@ -202,7 +166,6 @@ def run_tta_eval(model, df: pd.DataFrame, cfg, device, mode: str = "selective",
         "views": [v[0] for v in views],
         "timing": {
             "mode": mode,
-            "tau": tau,
             "n_views": len(views),
             "n_samples": n,
             "n_triggered": int(trigger.sum()),

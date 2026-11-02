@@ -1,0 +1,981 @@
+=== PAGE 1 ===
+Rethinking Compact (<1M) Vision Models: Balancing Accuracy and Speed
+through Multi-Path Atrous Convolutions
+Christos Kyrkou
+KIOS Research and Innovation Center of Excellence
+University of Cyprus
+1 Panepistimiou Avenue, Nicosia, Cyprus
+kyrkou.christos@ucy.ac.cy
+Abstract
+Deep learning has transformed computer vision, yet state-
+of-the-art models increasingly rely on large-scale architec-
+tures and datasets, reinforcing a “scale is all you need”
+paradigm. This trend creates challenges for real-time,
+resource-constrained systems, where even lightweight mod-
+els often contain millions of parameters. This work, system-
+atically investigates the landscape of deep learning models
+in the sub-1M parameter regime, for small- to medium- sized
+datasets representative of vision tasks (classiﬁcation and
+detection), and provides empirical comparison of represen-
+tative architectures, highlighting cross-dataset generaliza-
+tion under strict parameter budgets. Notably, it is observed
+that naive downscaling of existing architectures often leads
+to inconsistent performance, and that Vision Transformers
+underperform relative to CNNs in data-constrained, low-
+parameter settings. To address these gaps, this work pro-
+poses a novel architecture speciﬁcally tailored for the sub-
+1M regime that utilizes multi-path atrous convolutions to
+capture contextual features eﬃciently. The proposed model
+outperforms existing compact architectures even at 100K
+parameter regime, while delivering on average 3.3× faster
+inference on real devices. These results demonstrate that
+small-scale models, when architecturally rethought rather
+than merely reduced, can achieve both eﬃciency and com-
+petitive performance in constrained environments.
+1. Introduction
+Deep Neural Networks (DNNs) have been at the forefront
+of continual and signiﬁcant advances on problems such as
+image classiﬁcation [11, 38] and object detection [6, 19, 49].
+More recently with the use of Transformer networks [43] and
+Self-Supervised Learning [1] more focus has been given to-
+wards operating on large compute clusters, and models with
+billions of parameters and proprietary large-scale datasets.
+Figure 1. Comparing the accuracy-speed of diﬀerent sub-1M pa-
+rameter vision models. Latency tested on Jetson Orin with batch
+size of 1 and accuracy on ImageNet-16 dataset.
+As a result, one of the key emerging challenges has become
+how to optimize AI models for devices with limited re-
+sources, such as IoT, smartphones, and autonomous drones
+[41],[27]. Known as edge AI, the goal of this area is to permit
+such devices to perform vision tasks autonomously without
+relying on cloud computing. However, implementing deep
+learning models on these edge systems requires address-
+ing constraints like computation time, energy consumption,
+memory footprint, model size, and even carbon emissions
+[42][33][26]. Hence, developing smaller and eﬃcient mod-
+els tailored to small- and medium-sized datasets is essential
+to enable AI capabilities in these resource-constrained envi-
+ronments [4, 25].
+Smaller models with fewer parameters and eﬃcient oper-
+ations are more amicable to running on devices with limited
+This CVPR Findings paper is the Open Access version, provided by the Computer Vision
+ Foundation. Except for this watermark, it is identical to the accepted version;
+ the final published version of the proceedings is available on IEEE Xplore.
+2710
+
+=== PAGE 2 ===
+resources [10, 45]. This allows their deployment in environ-
+ments including edge computing and decentralized systems
+[34]. Lightweight models allow for easier scaling and run-
+ning many AI tasks in parallel. More importantly, smaller
+models can also lead to quicker inference times, making
+them ideal for real-time applications. These advantages
+make it worthwhile to explore the architectural landscape
+of small eﬃcient models and how they balance accuracy
+and speed and which is more suitable for edge AI comput-
+ing platforms such as embedded GPU accelerated platforms
+[12],[51]. While prior research has compared large-scale
+pretrained backbones [11], small neural networks suitable
+for edge deployment (e.g., IoT, robotics, wearables) with
+fewer than 1 million parameters remain underexplored on
+small-to-medium datasets [ 3]; compared to mobile-scale
+models 2-20 million parameter models.
+This work is motivated by the absence of systematic eval-
+uation and design principles for eﬀective small-scale vision
+models and how they perform in terms of accuracy and infer-
+ence time within current architectural paradigms, motivated
+by the practical constraints of limited compute and modest
+data availability. It is argued that architectural design, i.e.,
+how parameters are structured and utilized, matters as much
+as their quantity, necessitating a systematic evaluation of cur-
+rent architectures [11, 13, 32, 37, 40] in the low-parameter
+regime. Building on these insights, this work introduces
+LiteSpeed-Net (LS-Net)1, a novel lightweight architecture
+that leverages multi-branch structures with atrous depth-
+wise convolutions to eﬃciently capture contextual features.
+While this work builds on multi-scale and depthwise princi-
+ples it is the ﬁrst to systematically analyze their performance
+in the sub-1M-parameter regime. Empirical evaluations on
+both standard, and real-world benchmarks (in supplemen-
+tary material (SM)) show that LS-Net achieves a superior
+accuracy–latency trade-oﬀ. It delivers up to a +2% accuracy
+gain with a 3.3× speedup in image classiﬁcation, and on av-
+erage runs 1.5× faster in detection tasks while maintaining
+competitive robustness and generalization across datasets
+and device classes. Notably, these advantages persist even
+when the model is scaled down to as few as 100K param-
+eters. These results position LS-Net as a strong candidate
+for edge AI applications requiring compact, high-speed, and
+accurate models.
+This study reveals several key insights: 1 The perfor-
+mance of existing models in terms of accuracy varies unpre-
+dictably across datasets, indicating that scaling alone does
+not generalize well in the low-parameter regime. Rather,
+the low-parameter regime requires architectural rethinking.
+2 While vision transformers (ViTs) are increasingly pop-
+ular they still lag behind convolutional neural networks
+(CNNs) in the small-to-medium parameter/data regimes,
+which provides opportunities for further research toward
+1Code Repository: https://github.com/ckyrkou/videl
+this area. 3 Architectures optimized for low Multiply-
+Accumulate Operations (MACs) may underperform in terms
+of real latency. 4 Incorporating multi-scale feature fusion
+with atrous depthwise convolutions enables consistently im-
+proved performance and faster computation.
+2. Architectural Trends
+Increasing Depth with Residuals: As CNNs grew deeper,
+they encountered issues with vanishing and exploding gra-
+dients. He et al. [ 14] addressed this with ResNet, which
+introduced residual connections to alleviate these problems,
+enabling much deeper networks. The core ResNet architec-
+ture uses identity shortcut connections across convolutional
+or attention layers to bypass degradation in performance as
+depth increases since they enable models to retain useful
+information[31],[28].
+The Depthwise Separable Convolution Paradigm :I n
+2017, MobileNet [ 15] was explicitly proposed to provide
+lightweight and eﬃcient neural network models that can
+operate in real-time on devices with limited memory, and
+constrained compute. The model utilized depthwise sepa-
+rable convolution, which involves the decomposition of a
+traditional convolution into two distinct operations: depth-
+wise and pointwise convolution using a 1 × 1 kernel. In
+conventional convolution, kernels are collectively applied to
+all the input channels, resulting in a single combined out-
+put. Furthermore, depthwise separable convolution inde-
+pendent channel-wise convolution is applied before mixing
+this with a point-wise convolution. The authors also sug-
+gested the integration of two hyperparameters, precisely the
+width and resolution multipliers, to optimize the computa-
+tional eﬃciency and reduce the model’s dimensions. San-
+dler et al.[37] introduced an improved version MobileNetv2
+using the main concepts of MobilenetV1 such as depth-wise
+separable convolutions and model parameter reduction. The
+MobileNetv2 architecture introduced a novel module called
+the inverted residual with a linear bottleneck (IRB), which
+aimed to decrease the computational requirements and en-
+hance accuracy. It ﬁrst expands the feature space using
+a pointwise convolution and then does spatial feature ex-
+traction with a depthwise separable convolution before it
+is projected back to a lower dimensional space. The Mo-
+bileNetV3 model [20] builds on top of the depth-wise sep-
+arable paradigm and inverted residual bottleneck through a
+combination of hardware-aware network architecture search
+techniques and novel architecture designs. Speciﬁcally, the
+architectural parameters are obtained by neural architecture
+search (NAS) [50]. It also uses the H-swish non-linearity
+which has been proved experimentally to improve accuracy.
+In addition, it adds a squeeze and excitation module to help in
+adjusting the per channel weights of diﬀerent feature maps.
+The work in [8] pushes the limits of depthwise convolutions
+further and proposes optimizations for designing lightweight
+2711
+
+=== PAGE 3 ===
+CNNs, by improving the activation function, selective use of
+squeeze-and-excitation blocks [16], and larger convolutional
+ﬁlters.
+Compound Scaling: The EﬃcientNet [40] architecture was
+designed to balance high eﬃciency and accuracy. It inves-
+tigated the eﬀect of scaling of depth, width, and resolution,
+and proposed the use of a combined scaling factor to ad-
+just the three dimension together. This helps to control the
+target computational complexity (i.e., MACs) of a given
+DNN model. The B0 version (baseline) was introduced
+as the smallest and lightest version among other versions
+of EﬃcientNet, suitable for devices with limited resources.
+However, as demonstrated in this work the number of pa-
+rameters alone and the MACs/FLOPs metrics might not
+directly translate to eﬃcient operation on device.To address
+these limitations, EﬃcientNetV2 [39] adopts a progressive
+learning strategy that increases image resolution and data
+augmentation complexity over time. Second, it improves
+network design by incorporating two blocks, MBConv (Mo-
+bileNet block) and Fused-MBConv which uses a regular
+3 × 3 convolution and leverages neural architecture search
+to automatically search for the best combination.
+Shuﬄing: ShuﬄeNetV2 [32] has been developed for speed
+in mind rather than FLOPs like EﬃcientNet. It improves the
+architecture of ShuﬄeNetV1, by ensuring that i) the input
+and output channels have equal widths, thus minimizing the
+cost associated with memory access, ii) makes targeted use
+of group convolution to reduce computational demands, iii)
+improved bottleneck by removing element-wise operations
+such as addition. Based on these it proposes a novel building
+block where the input is divided into two segments using a
+channel split layer and the channel shuﬄe operation is moved
+further down the block.
+Squeezing: The SqueezeNet [17] model was developed to
+enable eﬃcient neural network inference on devices with
+limited resources, such as mobile devices. The architecture
+includes a combination of 1 × 1 and 3 × 3 which incur the
+least amount of computation compared to those with larger
+receptive ﬁeld. The primary use of 1 × 1 convolutions is
+to increase the number of channels, enhancing the potential
+to capture intricate patterns. The use of 3 × 3 convolutions
+facilitates the acquisition of spatial information and con-
+tributes to the acquisition of hierarchical features. Drawing
+inspiration from ResNet more recent versions incorporate
+residual connections. This adaptation resulted in improved
+accuracy compared with the original model.
+Cheap Operations: GhostNet [13] proposes a ghost mod-
+ule that ﬁrst uses standard convolutional operation to obtain
+a few intrinsic features and then generates "ghost features"
+through cheap linear operations (e.g., depthwise convolu-
+tions). This leads to rich features with minimal compu-
+tational cost, resulting in maintaining accuracy with fewer
+parameters and computations.
+Attention and Patches:The latest architectural involves us-
+ing image patches as tokens, which are processed through the
+self-attention mechanism in transformer networks [9]. This
+Vision Transformer (ViT) architecture also includes straight-
+forward feed-forward and layer normalization layers. While
+the architecture of the vanilla ViT seems simple and poten-
+tially eﬃcient, the removal of inductive biases makes it chal-
+lenging to train them from scratch for smaller datasets and
+retain competitive performance [24]. Typically ViT models
+rely on large parameter counts and extensive pretraining on
+large-scale datasets which makes there adoption in edge AI
+systems challenging [26]. Another challenge is with ViT’s
+global attention design is its quadratic complexity relative
+to the input size which has been the subject of recent studies
+that proposed alternatives such as cascaded group attention
+[29]. The recent advances of Vision Transformers has moti-
+vated researchers to explore similar concepts for ConvNets.
+The authors in [ 30] propose ConvNeXt by modernizing a
+ResNet towards a hierarchical Transformer-like structure by
+adding a patchify layer as well as incorporating larger ker-
+nels, and layernorm normalization. This resulted in better
+scalability and accuracy, without sacriﬁcing the eﬃciency
+and simplicity of ConvNets. More recently, ConvNextV2
+[46] introduced several key improvements to allow Con-
+vNets to better work more eﬀectively in a self-supervised
+setting.
+Main Limitations: Existing paradigms remain constrained
+by (1) limited sampling diversity due to repeated local recep-
+tive ﬁelds, (2) quadratic compute growth when expanding
+receptive ﬁelds via larger kernels, and (3) weak correlation
+between FLOPs and actual device latency. Furthermore,
+prior work does not quantify the trade-oﬀ between distinct
+spatial samples and computational cost.
+3. LiteSpeed Deep Network Architecture
+Motivated by the aforementioned observations, this work
+presents a compact model design that reallocates parameters
+to enhance spatial diversity through parallel execution paths
+yielding more favorable eﬃciency–accuracy trade-oﬀs. The
+hypothesis is that as parameter budgets shrink, the ability to
+learn diverse spatial representations becomes increasingly
+critical for discrimination, requiring eﬀective contextualiza-
+tion of local features. Guided by this principle, the Lite-
+Speed architecture is introduced.
+3.1. Multi-Path Atrous Convolutions
+At the core of the LiteSpeed Network is the Multi-Path
+Atrous Convolutions (MPAC) block. It is a generic block
+that can be conﬁgured to include diﬀerent operations and
+aims to: i) Extract multi-scale features to capture both local
+details and more global context simultaneously. ii) Ag-
+gregate and increase feature dimensionality through con-
+catenation which does not incur additional computational
+2712
+
+=== PAGE 4 ===
+Figure 2. M ulti-Path Atrous Convolution (MPAC) Block. This block is repeated within the general architecture and instantiated with
+diﬀerent conﬁgurations and convolutional channel dimensions. In this work this block is instantiated without the depth expander/reducer.
+cost. iii) Exploit atrous convolutions that skip input val-
+ues leading to larger receptive ﬁeld with fewer operations
+to cover a larger area, providing a richer representation. iv)
+Utilize depth-wise convolutions for all the atrous convolu-
+tions to learn spatial features in a computationally-eﬃcient
+way. Unlike similar blocks found in ASPP[5]/Inception[47],
+which target large models or use full convolutions or use
+dilated convolutions after a backbone, MPAC is explicitly
+constrained to minimal branching, depthwise atrous oper-
+ations, and concatenation-driven channel expansion across
+all layers. The main MPAC operation can be summarized as
+follows.
+Let X ∈ R𝐻×𝑊×𝐶 denote the input tensor. The MPAC
+block aims to maximize receptive ﬁeld coverage and add
+more context. To achieve this, the block applies𝑀 parallel
+depth-wise atrous convolutions with distinct dilation factors
+𝑑𝑖. For the 𝑖-th path (with simpliﬁed notation):
+Y(𝑖)(𝑙,𝑚 ) =
+𝑘−1/summationdisplay.1
+𝑢=0
+𝑘−1/summationdisplay.1
+𝑣=0
+W(𝑖)𝑢,𝑣 ∗ X𝑙+𝑑𝑖𝑢,𝑚+𝑑𝑖𝑣,𝑖 = 1,...,𝑀 (1)
+where Y(i) ∈ R𝐻×𝑊×𝐶 is the output feature map of path
+𝑖, W(𝑖) ∈ R𝑘×𝑘 are depthwise kernels of path 𝑖, 𝑑𝑖 denotes
+the convolution dilation rate. The multi-scale responses are
+then concatenated along the channel axis:
+𝑍 = 𝐶𝑜𝑛𝑐𝑎𝑡 (Y(1), Y(2),..., Y(𝑀))∈ 𝑅𝐻×𝑊×(𝑀𝐶) (2)
+A block with 2 atrous convolutions and concatenation is
+implemented as follows:
+Y(1) = 𝐴𝑡𝑟𝑜𝑢𝑠𝐷𝑒𝑝𝑡ℎ𝐶𝑜𝑛𝑣 𝑑1 (X)
+Y(2) = 𝐴𝑡𝑟𝑜𝑢𝑠𝐷𝑒𝑝𝑡ℎ𝐶𝑜𝑛𝑣 𝑑2 (X)
+Z = 𝑐𝑜𝑛𝑐𝑎𝑡 ([ Y(1), Y(2)])
+The 𝐴𝑡𝑟𝑜𝑢𝑠𝐷𝑒𝑝𝑡ℎ𝐶𝑜𝑛𝑣 (·)𝑑𝑖 block refers to the𝑖th block
+of atrous convolution operations with dilation rate of𝑑𝑖 = 𝑖
+(e.g.,𝑑1 is a canonical 3×3 kernel and𝑑2 = 2 (i.e., eﬀective
+5× 5 receptive ﬁeld with 9 parameters). 𝑐𝑜𝑛𝑐𝑎𝑡 [·,·] refers
+to the channel-wise feature aggregation. In this case con-
+catenating features from diﬀerent atrous convolutions allows
+diverse representation of the input that can improve discrim-
+ination ability. Note that the block can also be instantiated
+with only the𝑑 = 1 atrous convolution eﬀectively becoming
+a VGG-style block. This operation is followed by a nor-
+malization operation and activation which in this case are
+batch normalization and LeakyRelu respectively, the latter
+selected for its higher eﬃciency, improved gradient propa-
+gation, and support in many inference deployment platforms
+[29].
+There are optional operations that can be instantiated
+within the block. Prior to the main MPAC operation a
+channel expansion/reduction module, controlled by the non-
+negative parameter 𝛼, can be instantiated to transform the
+input tensor such that R𝐻×𝑊×𝐶 −→ R𝐻×𝑊×( 𝛼·𝐶) , which is
+akin to an inverted residual block as in [ 37] when 𝛼> 1
+or reduction block as in [ 17] when 𝛼< 1. Finally, at the
+end a projection component is used to mix the feature maps
+using 1× 1 convolution. The input can optionally be added
+to the output tensor to form a residual block to aid in gra-
+dient propagation. Overall, the MPAC block encapsulates
+various architectural choices resulting in a highly adaptable,
+eﬃcient, and powerful building block that can be used to
+generate eﬃcient small deep learning models.
+3.2. Network Architecture
+Generic Architecture: The architecture utilizes a stem
+block, followed by a series of stacked MPAC blocks uti-
+lizing strided convolutions for downsampling instantiating a
+∼ 1 million parameter model described herein. Subsequent
+smaller model sizes can be derived by applying a scaling
+factor on the number of ﬁlters (shown in Section4.4).
+1M Model Instantiation: The stem layer is a standard
+convolutional layer which outputs 24 ﬁlters with batchnorm
+normalization and also reduces the spatial resolution by 2.
+Then a series of MPAC blocks are followed by gradually
+2713
+
+=== PAGE 5 ===
+Figure 3. Generic Architecture of LiteSpeed Network.
+increased channels by adding powers of 2, grouped into
+stages according to the size of the feature maps that they
+progress. Downsampling is applied at the beginning of each
+stage, allowing subsequent blocks within that stage to pro-
+cess features with the same or an increased number of ﬁlters.
+The number of channels and number of blocks were chosen
+through empirical design exploration and then subsequently
+used for all datasets and experiments. The last convolu-
+tional block followed by a normalization layer, projects the
+output feature map from the preceding stage to the number
+of classes. Then a global average pooling is utilized to get
+the ﬁnal representation vector for classiﬁcation. Overall,
+batch normalization is used instead of layer normalization,
+as seen in recent Transformer architectures, to better leverage
+larger batch sizes made feasible by the smaller model sizes.
+More details on the architecture and theoretical insights are
+provided in the SM (S1 and S2).
+4. Experiments and Results
+To evaluate performance, the proposed model is compared
+with state-of-the-art models used for image classiﬁcation as
+outlined in Section 2. These include MobileNets [ 20, 37],
+ShuﬄeNetV2 [32], SqueezeNet2 [17], EﬃcientNet [40], Ef-
+ﬁcientNetV2 [39], ConvNextV2 [46], GhostNet [13], PP-LC
+[8], ResNet3 [14], original Vision Transformers4 [9] and ef-
+ﬁcient variants [ 29]. All models are scaled down so that
+their parameters are less than 1 million as shown in Table2
+by adjusting a channel width multiplier factor. More results
+on additional datasets, robustness, ablations, and training
+settings are provided in the SM (S5,S6,S7,S8,S9).
+2Added Batchnorm to base model
+3ResNet18 variant, 4 layers with blocks per layer set as 4,3,2 and 1.
+4Depth of 4 and number of heads is 3. Patch size is 10 for IIC, 4 for
+C10, and 16 for ImgN16
+<1M Param Acc-ImgN16 Acc-C10 Acc-IIC
+Models (%) ↑ (%) ↑ (%) ↑
+MobileNetV2 [37] 84.7 83.5 91.1
+GhostNet [13] 76.5 75.6† 89.0†
+PP-LC [8] 80.2 75.6† 90.4
+EﬃcientNet [40] 82.7 84.4 89.0†
+EﬃcientNetV2 [39] 78.8 84.6 89.6†
+ViT [9] 58.75† 74.4† 84.6†
+EﬃcientViT [29] 73.0 84.1 88.9
+ConvNextV2 [46] 68.5† 78.7† 88.3†
+MobileNetV3 [20] 76.1† 72.2† 88.8†
+SqueezeNet [17] 80.0† 68.2† 90.1†
+ShuﬄeNetV2 [32] 83.6 79.2 89.7
+ResNet [14] 83.8 91.3 91.3†
+LiteSpeed-Net (proposed) 86.5 91.9 91.6
+Table 1. Comparison of sub-1M parameter Vision Networks on
+diﬀerent datasets
+† Best results with initial learning rate of 1𝑒 − 3
+4.1. Benchmark Suite
+To perform an investigation of the architectural landscape
+and assess the eﬀectiveness of the proposed model, ex-
+periments are conducted using a benchmark suite of three
+small-to-medium classiﬁcation datasets. These include
+the CIFAR-10 [21] dataset (referred to as C10), Intel Im-
+age Classiﬁcation (referred to as IIC) dataset 5, and the
+ImageNet-16 [22] dataset (referred to as ImgN16), a sub-
+set of the ImageNet dataset. Collectively, these datasets
+provide a comprehensive evaluation set, encompassing a
+wide range of class counts and image resolutions, thereby
+enabling a thorough assessment of the proposed approach.
+Further details on each dataset are available in the SM-S4.
+4.2. Accuracy Results
+Accuracy results of the proposed LS-Net model are pre-
+sented in Table 1 and compared with scaled-down versions
+of established architectures all trained from scratch. Addi-
+tionally, the proposed network is compared to other works
+in the literature, that do not speciﬁcally focus on smaller
+models and also evaluated on larger datasets.
+Firstly, for the ImageNet-16 dataset LS-Net achieves the
+highest accuracy at 86.5%, demonstrating a strong perfor-
+mance in this parameter budget. Speciﬁcally, it surpasses
+the MobileNetV2 model by 1.8% which is the second best
+and has a large margin on other models such as ResNet and
+ShuﬄeNetV2. More specialized architecture such as PP-LC
+and GhostNet fall further behind. Notably, the ViT archi-
+tecture provides the lowest accuracy, while the ConvNext
+model also performs less eﬀectively.
+5available on Kaggle https://www.kaggle.com/datasets/
+puneet6060/intel-image-classification
+2714
+
+=== PAGE 6 ===
+Comparisons on the CIFAR-10 dataset, which has the
+most number of samples from the benchmark suite, again
+demonstrate that the proposed LS-Net provides the higher
+accuracy, followed by the ResNet model and then Eﬃcient-
+NetV2. Note that for this lower resolution dataset the pre-
+viously second model MobileNetV2 drops to fourth. This
+demonstrates that the proposed architecture is even compet-
+itive at the lower resolution regime where features become
+mode diﬃcult to detect. Notably, only LS-Net and ResNet
+reach over 90% accuracy on the CIFAR-10 dataset. As
+a reference, conventional multi-million parameter models
+that do not make use of advanced methods like learnable
+augmentations, ensembling, self-supervision, or large-scale
+pretraining generally achieve accuracies in the 90 − 95%
+range [22]. The proposed LS-Net performs competitively,
+at a signiﬁcantly smaller size. More details on varying set-
+tings and results for this dataset are presented in SM-S9.
+Finally, when comparing the diﬀerent models on the Intel
+Image Classiﬁcation challenge dataset, where it is necessary
+to understand the whole scene and not focus on speciﬁc ob-
+jects within the image, the proposed model again manages
+to provide the highest accuracy. It is followed by ResNet
+and MobileNetV2. When comparing with some existing
+models from the literature the proposed LS-Net compares
+favorably. Notably it is also able to provide higher accuracy
+than some established multi-million parameter models that
+also utilize transfer learning [ 36],[47] which exhibit accu-
+racies ranging from 87%-94%. It also compares favorable
+to other networks (2-3 million parameters) reported in the
+literature [44], but with a fraction of the parameters while
+being trained from scratch.
+4.3. Inference Speed
+While the accuracy results may suggest that the diﬀerent
+models are closely matched, it is essential to consider the
+inference speed as well, especially for real-time edge AI
+systems. Therefore, accuracy should be evaluated in con-
+junction with inference speed to gain a comprehensive un-
+derstanding of model performance. The average frames-
+per-second (FPS) for each model is reported after 10 , 000
+iterations of proﬁling. Table 2 presents the performance
+comparison of the small vision models considering the two
+diﬀerent computing platforms common for EdgeAI evalu-
+ation [2], NVIDIA Jetson AGX Orin and NVIDIA Jetson
+Nano (more details in SM-S3). Number of model parame-
+ters, MACs, and FPS performance on both devices are also
+provided, allowing for a clear evaluation of the speed advan-
+tages of the proposed LS-Net. Additional results are shown
+in SM-S10.
+LS-Net demonstrates a clear speed advantage on the
+NVIDIA Jetson Orin, achieving over 200 FPS, which is
+the highest among all the models. ResNet achieves 128
+FPS, which is 41% slower than LS-Net. ViT reaches 187
+<1M Param Parameters MACs∗∗ FPS† FPS‡
+Models (×103) (×106) (1/s) ↑ (1/s) ↑
+MobileNetV2 [37] ∼ 956 164 70 25
+GhostNet [13] ∼ 962 45 43 12
+PP-LC [8] ∼ 906 97 79 22
+EﬃcientNet [40] ∼ 987 115 45 15
+EﬃcientNetV2 [39] ∼ 900 220 25 8
+ViT [9] ∼ 980 186 187 57
+EﬃceintViT [29] ∼ 932 34 24 8
+ConvNextV2 [46] ∼ 967 324 70 23
+MobileNetV3 [20] ∼ 995 40.9 63 18
+SqueezeNet [17] ∼ 967 947 135 30
+ShuﬄeNetV2 [32] ∼ 944 97 44 14
+ResNet [14] ∼ 973 3190 128 12
+LiteSpeed-Net (proposed) ∼ 919 295 220 64
+Table 2. Comparison in terms of FPS of the small models
+† Measured for a resolution of 224× 224 on NVIDIA Jetson Orin
+‡ Measured for a resolution of 224× 224 on NVIDIA Jetson Nano
+∗∗ MACs estimated using: https://github.com/sovrasov/
+flops-counter.pytorch/tree/master/ptflops
+FPS, slightly trailing LS-Net by approximately 18% but with
+much lower accuracies. SqueezeNet achieves 135 FPS, wh-
+cih is slower by ∼ 38%. Other models like MobileNetV2
+(70 FPS), MobileNetV3 (63 FPS), and EﬃcientNet (45 FPS)
+show signiﬁcantly lower performance, with LS-Net being up
+to 3–4 times faster. On the Jetson Nano, LS-Net continues to
+outperform the competing models, achieving 64 FPS. Again,
+this is the highest across the models. ViT comes closest with
+57 FPS, but LS-Net still maintains a 12% higher FPS archiv-
+ing much higher accuracies. Other models like ResNet (12
+FPS), SqueezeNet (30 FPS), MobileNetV2 (25 FPS), and
+MobileNetV3 (18 FPS) perform signiﬁcantly worse, with
+LS-Net being 2-5 times faster.
+LS-Net has 295 million MACs, placing it towards the
+lower end of the spectrum when compared to more computa-
+tionally expensive models like ResNet (3190 million MACs)
+and SqueezeNet (947 million MACs). While some models
+like GhostNet (45 MACs) and MobileNetV3 (40.9 MACs)
+have fewer MACs than LS-Net, their FPS performance is
+substantially lower (e.g., GhostNet at 43 FPS on Jetson Orin
+and 12 FPS on Jetson Nano). Despite higher MACs, LS-Net
+outperforms these models in terms of FPS, demonstrating
+its ability to achieve better utilization. Speciﬁcally, while it
+shows increase in MACs, these are devoted to 1× 1 convo-
+lutional operations which are highly parallelized on modern
+EdgeAI devices. This consistent performance advantage
+across both computing platforms suggests that the proposed
+architectural considerations translate into faster real-time
+processing. LS-Net not only excels in scenarios requiring
+real-time processing but is also able to consistently outper-
+form other small models with strong accuracy performance
+across datasets.
+2715
+
+=== PAGE 7 ===
+Figure 4. Performance of models on CIFAR-10 when scaling
+down to∼ 100𝐾 parameters and comparison with∼ 1𝑀 versions.
+(marker shapes represent model, color represents size, Best viewed
+in color)
+4.4. Scaling Down to Tiny Models
+This experiment, investigates the scaling trends when re-
+ducing parameters to the order of ∼ 100𝐾 for tiny models.
+These models are better suited for on-device training and
+data privacy, particularly on lower-end AI and IoT devices
+and have seen increasing adoption in real-world applications
+[23]. However, deploying established pretrained models in
+these environments presents challenges due to limited mem-
+ory and computational resources. By analyzing the behav-
+ior of various architectures under parameter constraints, it
+is possible to investigate which structures are more resilient
+to scaling down.
+First, the top-performing models from the previous exper-
+iments are selected, speciﬁcally those that ranked among the
+top four across the datasets, namely: LS-Net, ResNet, Mo-
+bileNetV2, EﬃcientNetV2, EﬃcientNet, and ShuﬄeNetV2.
+Then they are scaled down until they reached just over 100𝐾
+parameters without any other modiﬁcation, and compare
+them on the CIFAR-10 and ImageNet-16 datasets, with re-
+sults presented in Table3.
+Initially it is observed that the proposed LS-Net achieved
+the higher accuracy in the tiny model regime, maintaining a
+signiﬁcant advantage over the rest. Also, it is observed that
+the ranking of the diﬀerent models is not consistent across
+datasets. For instance, ResNet has the second highest accu-
+racy for CIFAR-10 but is ranked ﬁfth on ImageNet-16. This
+demonstrates another strength of LS-Net in that it is capable
+of maintaining competitive performance across datasets for
+diﬀerent scales. Additionally, the performance of the tiny
+∼100K Param Params Acc-ImgN16 Acc-C10
+Models (×103) (%) ↑ (%) ↑
+MobileNetV2 [37] ∼ 154 80.1 74.4
+EﬃcientNet [40] ∼ 147 80.6 77.2
+EﬃcientNetV2 [39] ∼ 140 78.8 84.6
+ShuﬄeNetV2 [32] ∼ 151 81.0 76.1
+ResNet [14] ∼ 114 79.1 86.1
+LiteSpeed-Net (proposed) ∼ 145 81.4 88.8
+Table 3. Performance of scaled down versions of best models to
+tiny sizes of∼ 100𝐾 parameters.
+models is compared with their 1𝑀-parameter counterparts.
+As illustrated in Fig. 4, the tiny models generally show a
+decline in performance, which is expected, with most drop-
+ping below 80% accuracy for CIFAR-10, making them less
+competitive and practical. Interestingly, the proposed 100𝐾
+version of the LS-Net model outperformed almost all the
+other 1𝑀 parameters models for CIFAR-10, also demon-
+strating the least drop from the 1𝑀 counterpart.
+4.5. Additional Comparisons and Insights
+Trends on Larger-Scale Datasets: Beyond the compara-
+tive study, LS-Net is positioned in the context of larger-scale
+datasets, which introduce greater complexity due to the in-
+creased number of classes/instances, as well as comparing
+with additional models. To evaluate its scalability, the same
+sub-1M LS-Net model is trained on TinyImageNet and a
+subset of ImageNet with 100 classes6. These datasets pro-
+vide a natural progression in complexity while maintaining
+a manageable scale for low-parameter models. The 1M pa-
+rameter LS-Net achieves 46% top-1 accuracy on TinyIma-
+geNet, which is on par with 2M parameter WaveMix models
+and comparable to ResNet models [18] in the literature. Ad-
+ditionally, our 100K model outperforms all reported sub-1M
+WaveMix models on CIFAR-10 [18]. When tested on the
+Orin, a 1M parameter WaveMix model achieves 40 FPS,
+whereas LS-Net reaches 200 FPS, highlighting its ability to
+deliver both accuracy and speed in low-parameter settings.
+On the ImageNet subset, the proposed model achieves 70%
+top-1 accuracy, positioning it competitively against signiﬁ-
+cantly larger models [48].
+Why LS-Net works: It is observed that overall LS-Net
+demonstrates signiﬁcant speedup over other models, but the
+speciﬁc advantage varies depending on the model and de-
+vice. Indicating that the hardware architecture inﬂuences
+the model performance. Speedups range from 1.1× for the
+Vision Transformer to 5.3× for ResNet and GhostNet. How-
+ever, the ViT model trails signiﬁcantly in terms of accuracy.
+LS-Net shows notable speedup over models considered more
+6https : / / www . kaggle . com / datasets / ambityga /
+imagenet100
+2716
+
+=== PAGE 8 ===
+mobile-friendly like MobileNetV2 (2.5× on Orin, 3.1× on
+Nano) and MobileNetV3 (3.5× on Orin, 3.4× on Nano). The
+consistent speedup of the proposed model suggests that its
+specialized architecture can adequately accommodate dif-
+ferent hardware as its parallel receptive ﬁelds provide more
+feature reuse and higher FPS. Speciﬁcally, LS-Net incorpo-
+rates design principles of early downsampling, fewer ﬁlters
+in initial layers, simple operations (depthwise convolutions
+without the expansion as in MobileNets), no complex opera-
+tions (e.g., squeeze-excite as in EﬃcientNet), smaller dilated
+kernels (compared to full 7 × 7 used in ConvNextV2), and
+Leaky ReLU activation (compared to exponential functions).
+The LS-Net model maintains consistently high accuracies in
+the low-parameter regime compared to other models that are
+scaled down from larger architectures, as it is built bottom-
+up with eﬃciency in mind with the mixing of multi-scale
+features. This ensures better use of learning capacity as
+parameters are distributed more eﬀectively across layers.
+4.6. Object Detection
+Expanding to tasks such as object detection would necessi-
+tate investigating aspects such as neck and head architectures
+and additional loss functions. For simplicity typical struc-
+ture for head and neck are set, and parameters, and use IoU-
+based loss functions for box regression. All models where
+trained from scratch. The utilized datasets come from the
+Roboﬂow 1007 benchmark suite [7] for animals, vehicles,
+and construction safety, the HomeObjects-3K 8 dataset for
+applications in indoor scene understanding and smart home,
+and for ﬁne-grained detection the person/person-like VOC
+[35] subset on Kaggle9.
+Results are provided in Table4 for object detection com-
+paring sub-1M model backbones, with added detection neck
+and heads. Results demonstrate that the proposed LS-Net
+achieves the highest or equal mAP@0.5 across all cate-
+gories, outperforming existing models in Vehicles (38.5%),
+Animals (60.5%), Construction (81.5%), Person/Person-like
+(75.4%) and Home Objects (54.4%). While some models,
+like EﬃcientNet and ShuﬄeNetV2, perform well in speciﬁc
+classes, their results are less consistent. ResNet shows strong
+detection for Vehicles but under-performs signiﬁcantly for
+Animals, highlighting its limitations. Overall, LS-Net oﬀers
+the most balanced and accurate performance across diverse
+object types. More comparisons and results are reported in
+SM (S11, and S12).
+The FPS performance of the best performing models for
+object detection were evaluated using the Jetson Orin plat-
+form. The LS-Net model demonstrated the highest through-
+put at 50 FPS, due to its optimized architecture. The ResNet
+7https://universe.roboflow.com/roboflow-100
+8https://docs.ultralytics.com/datasets/detect/
+homeobjects-3k/
+9https : / / www . kaggle . com / datasets / karthika95 /
+pedestrian-detection
+Vehicles Animals Construction Person Home
+<1M Param Backbones Objects
+mAP@0.5 (%) ↑
+MobileNetV2 [37] 37.4 42.1 75.1 70.5 44.6
+EﬃcientNet [40] 38.5 50.9 76.8 60.7 39.7
+EﬃcientNetV2 [39] 36.3 39.3 73.5 63.9 51.8
+ShuﬄeNetV2 [32] 37.6 46.4 70.2 69.7 50.0
+ResNet [14] 38.1 40.8 73.1 65.2 49.1
+LiteSpeed-Net (proposed) 38.5 60.5 81.5 75.4 54.4
+Table 4. Object Detection Results
+variant followed with 42 FPS, outperforming models such
+as MobileNetV2 which achieved 34 FPS. EﬃcientNet and
+ShuﬄeNetV2 showed moderate inference speeds of 26 and
+24 FPS, respectively, EﬃcientNetV2 exhibited the lowest
+performance at 16 FPS. These results highlight the capabil-
+ity of the proposed architecture to provide speedups in the
+range of 1.3− 3.8 coupled with high accuracy.
+5. Concluding Remarks
+This work investigated the landscape of sub-1M parameter
+neural network models in vision tasks. It further developed
+a block and overall architecture referred to as LiteSpeed
+Network, and experiments validated it achieving both high
+accuracy and high inference speed across small-to-medium
+datasets of diﬀerent resolutions and number of classes, com-
+mon characteristics of many real-world applications, making
+it well-suited for resource-constrained edge AI systems. This
+work is among the ﬁrst to show systematic demonstrations
+that multi-path atrous convolutions can provide meaningful
+and consistent latency/accuracy trade-oﬀ in the small model
+regime. Furthermore, this work is orthogonal to quantiza-
+tion and pruning methods, and has set a competitive base-
+line for small vision models, especially when training from
+scratch, motivating more research in this direction. The
+ﬁndings also demonstrate that the recent trend of using Vi-
+sion Transformers might not be suitable for low-parameter
+and small-to-medium data regimes, especially when training
+small models from scratch. Future research will integrate
+the MPAC block with automated model search methods,
+like NAS, to develop more eﬃcient architectures at smaller
+scales.
+Limitations: The insights are shaped by the speciﬁc
+datasets, architectures, and conﬁgurations used in this study.
+Nonetheless, a principled methodology was followed that
+provides valuable guidance for designing eﬃcient neural
+networks while results under varying settings are presented
+in SM (S7,S8,S9). While it is possible that alternative ar-
+chitectures may perform competitively, the fact that the pro-
+posed architecture performs well without having to modify
+it for diﬀerent datasets suggests, that it oﬀers a strong, "oﬀ-
+the-shelf" baseline for research in fast and accurate small
+vision models.
+2717
+
+=== PAGE 9 ===
+Acknowledgements
+This work was supported by the European Union’s Hori-
+zon Europe research and innovation programme under grant
+agreement No. 101168067 (GuardAI). Views and opinions
+expressed are however those of the author(s) only and do
+not necessarily reﬂect those of the European Union. Neither
+the European Union nor the granting authority can be held
+responsible for them.
+The author would like to thank the reviewers for their
+valuable feedback, which strengthened the manuscript
+through additional experiments and comparisons.
+References
+[1] Mahmoud Assran, Quentin Duval, Ishan Misra, Piotr Bo-
+janowski, Pascal Vincent, Michael Rabbat, Yann LeCun, and
+Nicolas Ballas. Self-supervised learning from images with
+a joint-embedding predictive architecture. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 15619–15629, 2023. 1
+[2] Stephan Patrick Baller, Anshul Jindal, Mohak Chadha, and
+Michael Gerndt. Deepedgebench: Benchmarking deep neu-
+ral networks on edge devices. In 2021 IEEE international
+conference on cloud engineering (IC2E), pages 20–30. IEEE,
+2021. 6
+[3] Bjorn Barz and Joachim Denzler. Deep learning on small
+datasets without pre-training using cosine loss. In Proceed-
+ings of the IEEE/CVF winter conference on applications of
+computer vision, pages 1371–1380, 2020. 2
+[4] Lihu Chen and Gaël Varoquaux. What is the role of
+small models in the llm era: A survey. arXiv preprint
+arXiv:2409.06857, 2024. 1
+[5] Liang-Chieh Chen, Yukun Zhu, George Papandreou, Florian
+Schroﬀ, and Hartwig Adam. Encoder-decoder with atrous
+separable convolution for semantic image segmentation. In
+Proceedings of the European conference on computer vision
+(ECCV), pages 801–818, 2018. 4
+[6] Gong Cheng, Xiang Yuan, Xiwen Yao, Kebing Yan, Qinghua
+Zeng, Xingxing Xie, and Junwei Han. Towards large-scale
+small object detection: Survey and benchmarks.IEEE Trans-
+actions on Pattern Analysis and Machine Intelligence, 45(11):
+13467–13488, 2023. 1
+[7] Floriana Ciaglia, Francesco Saverio Zuppichini, Paul Guer-
+rie, Mark McQuade, and Jacob Solawetz. Roboﬂow 100: A
+rich, multi-domain object detection benchmark, 2022. 8
+[8] Cheng Cui, Tingquan Gao, Shengyu Wei, Yuning Du, Ruoyu
+Guo, Shuilong Dong, Bin Lu, Ying Zhou, Xueying Lv, Qiwen
+Liu, et al. Pp-lcnet: A lightweight cpu convolutional neural
+network. arXiv preprint arXiv:2109.15099, 2021. 2, 5, 6
+[9] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov,
+Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner,
+Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-
+vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image
+is worth 16x16 words: Transformers for image recognition
+at scale. In 9th International Conference on Learning Rep-
+resentations, ICLR 2021, Virtual Event, Austria, May 3-7,
+2021. OpenReview.net, 2021. 3, 5, 6
+[10] Muhammad Fahim, S. M. Ahsan Kazmi, Vishal Sharma,
+Hyundong Shin, and Trung Q. Duong. Edge intelligence:
+A deep distilled model for wearables to enable proactive el-
+dercare. IEEE Transactions on Artiﬁcial Intelligence, 6(7):
+1736–1745, 2025. 2
+[11] Micah Goldblum, Hossein Souri, Renkun Ni, Manli Shu,
+Viraj Prabhu, Gowthami Somepalli, Prithvijit Chattopadhyay,
+Mark Ibrahim, Adrien Bardes, Judy Hoﬀman, et al. Battle
+of the backbones: A large-scale comparison of pretrained
+models across computer vision tasks. Advances in Neural
+Information Processing Systems, 36, 2024. 1, 2
+[12] Hui Han and Julien Siebert. Tinyml: A systematic review and
+synthesis of existing research. In2022 International Confer-
+ence on Artiﬁcial Intelligence in Information and Communi-
+cation (ICAIIC), pages 269–274. IEEE, 2022. 2
+[13] Kai Han, Yunhe Wang, Qi Tian, Jianyuan Guo, Chunjing
+Xu, and Chang Xu. Ghostnet: More features from cheap
+operations. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), 2020. 2,
+3, 5, 6
+[14] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
+Deep residual learning for image recognition. In 2016 IEEE
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 770–778, 2016. 2, 5, 6, 7, 8
+[15] Andrew G Howard, Menglong Zhu, Bo Chen, Dmitry
+Kalenichenko, Weijun Wang, Tobias Weyand, Marco An-
+dreetto, and Hartwig Adam. Mobilenets: Eﬃcient convolu-
+tional neural networks for mobile vision applications. arXiv
+preprint arXiv:1704.04861, 2017. 2
+[16] Jie Hu, Li Shen, and Gang Sun. Squeeze-and-excitation net-
+works. In Proceedings of the IEEE conference on computer
+vision and pattern recognition, pages 7132–7141, 2018. 3
+[17] Forrest N Iandola, Song Han, Matthew W Moskewicz, Khalid
+Ashraf, William J Dally, and Kurt Keutzer. Squeezenet:
+Alexnet-level accuracy with 50x fewer parameters and< 0.5
+mb model size. arXiv preprint arXiv:1602.07360, 2016. 3,
+4, 5, 6
+[18] Pranav Jeevan and Amit Sethi. Wavemix: resource-eﬃcient
+token mixing for images. arXiv preprint arXiv:2203.03689,
+2022. 7
+[19] Licheng Jiao, Ruohan Zhang, Fang Liu, Shuyuan Yang, Biao
+Hou, Lingling Li, and Xu Tang. New generation deep learning
+for video object detection: A survey. IEEE Transactions on
+Neural Networks and Learning Systems , 33(8):3195–3215,
+2022. 1
+[20] Brett Koonce and Brett Koonce. Mobilenetv3.Convolutional
+Neural Networks with Swift for Tensorﬂow: Image Recogni-
+tion and Dataset Categorization, pages 125–144, 2021. 2, 5,
+6
+[21] Alex Krizhevsky and Geoﬀrey Hinton. Learning multiple
+layers of features from tiny images. Technical Report 0,
+University of Toronto, Toronto, Ontario, 2009.5
+[22] Christos Kyrkou. Toward eﬃcient convolutional neural net-
+works with structured ternary patterns. IEEE Transactions
+on Neural Networks and Learning Systems, pages 1–8, 2024.
+5, 6
+[23] Christos Kyrkou and Theocharis Theocharides. Emergen-
+cynet: Eﬃcient aerial image classiﬁcation for drone-based
+2718
+
+=== PAGE 10 ===
+emergency monitoring using atrous convolutional feature fu-
+sion. IEEE Journal of Selected Topics in Applied Earth Ob-
+servations and Remote Sensing, 13:1687–1699, 2020. 7
+[24] Seunghoon Lee, Seunghyun Lee, and Byung Cheol Song. Im-
+proving vision transformers to learn small-size dataset from
+scratch. IEEE Access, 10:123212–123224, 2022. 3
+[25] Ji Lin, Ligeng Zhu, Wei-Ming Chen, Wei-Chen Wang, and
+Song Han. Tiny machine learning: progress and futures.
+IEEE Circuits and Systems Magazine, 23(3):8–34, 2023. 1
+[26] Di Liu, Hao Kong, Xiangzhong Luo, Weichen Liu, and Ravi
+Subramaniam. Bringing ai to edge: From deep learning’s
+perspective. Neurocomputing, 485:297–320, 2022. 1, 3
+[27] Li Liu, Matti Pietikainen, Jie Qin, Wanli Ouyang, and Luc
+Van Gool. Eﬃcient visual recognition.International Journal
+of Computer Vision, 128:1997–2001, 2020. 1
+[28] Tianyi Liu, Minshuo Chen, Mo Zhou, Simon S Du, Enlu
+Zhou, and Tuo Zhao. Towards understanding the importance
+of shortcut connections in residual networks. Advances in
+neural information processing systems, 32, 2019. 2
+[29] Xinyu Liu, Houwen Peng, Ningxin Zheng, Yuqing Yang, Han
+Hu, and Yixuan Yuan. Eﬃcientvit: Memory eﬃcient vision
+transformer with cascaded group attention. In Proceedings
+of the IEEE/CVF conference on computer vision and pattern
+recognition, pages 14420–14430, 2023. 3, 4, 5, 6
+[30] Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, Christoph Feicht-
+enhofer, Trevor Darrell, and Saining Xie. A convnet for the
+2020s. In Proceedings of the IEEE/CVF conference on com-
+puter vision and pattern recognition , pages 11976–11986,
+2022. 3
+[31] Jian-Hao Luo and Jianxin Wu. Neural network pruning with
+residual-connections and limited-data. In Proceedings of the
+IEEE/CVF conference on computer vision and pattern recog-
+nition, pages 1458–1467, 2020. 2
+[32] Ningning Ma, Xiangyu Zhang, Hai-Tao Zheng, and Jian Sun.
+Shuﬄenet v2: Practical guidelines for eﬃcient cnn architec-
+ture design. In Proceedings of the European conference on
+computer vision (ECCV), pages 116–131, 2018. 2, 3, 5, 6, 7,
+8
+[33] Sparsh Mittal, Poonam Rajput, and Sreenivas Subramoney.
+A survey of deep learning on cpus: Opportunities and co-
+optimizations. IEEE Transactions on Neural Networks and
+Learning Systems, 33(10):5095–5115, 2022. 1
+[34] Tamador Mohaidat and Kasem Khalil. A survey on neural
+network hardware accelerators. IEEE Transactions on Artiﬁ-
+cial Intelligence, 5(8):3801–3822, 2024. 2
+[35] Chandran Saravanan N. J. Karthika. Addressing false posi-
+tives in pedestrian detection. In International Conference on
+Electronic Systems and Intelligent Computing (ESIC 2020),
+2020. 8
+[36] Mohammad Rahimzadeh, Soroush Parvin, Amirali Askari,
+Elnaz Saﬁ, and Mohammad Reza Mohammadi. Wise-srnet:
+a novel architecture for enhancing image classiﬁcation by
+learning spatial resolution of feature maps. Pattern Analysis
+and Applications, 27(2):30, 2024. 6
+[37] Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zh-
+moginov, and Liang-Chieh Chen. Mobilenetv2: Inverted
+residuals and linear bottlenecks. In Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition
+(CVPR), 2018. 2, 4, 5, 6, 7, 8
+[38] Maneet Singh, Shruti Nagpal, Richa Singh, and Mayank
+Vatsa. Derivenet for (very) low resolution image classiﬁ-
+cation. IEEE Transactions on Pattern Analysis and Machine
+Intelligence, 44(10):6569–6577, 2022. 1
+[39] Mingxing Tan and Quoc Le. Eﬃcientnetv2: Smaller models
+and faster training. In International conference on machine
+learning, pages 10096–10106. PMLR, 2021. 3, 5, 6, 7, 8
+[40] Mingxing Tan and Quoc V. Le. Eﬃcientnet: Rethinking
+model scaling for convolutional neural networks. CoRR,
+abs/1905.11946, 2019. 2, 3, 5, 6, 7, 8
+[41] Kristina Telegraph and Christos Kyrkou. Spatiotemporal ob-
+ject detection for improved aerial vehicle detection in traﬃc
+monitoring. IEEE Transactions on Artiﬁcial Intelligence,5
+(12):6159–6171, 2024. 1
+[42] Gaël Varoquaux, Alexandra Sasha Luccioni, and Meredith
+Whittaker. Hype, sustainability, and the price of the bigger-
+is-better paradigm in ai. arXiv preprint arXiv:2409.14160,
+2024. 1
+[43] A Vaswani. Attention is all you need. Advances in Neural
+Information Processing Systems, 2017. 1
+[44] Satvik Vats, Jai Prakash Bhati, Abhinash Singla, Vinay
+Kukreja, and Rishabh Sharma. Advanced image classiﬁ-
+cation on intel datasets using optimized eﬃcientnet and mo-
+bilenetv2. In 2024 IEEE 9th International Conference for
+Convergence in Technology (I2CT), pages 1–4, 2024. 6
+[45] Chuan Wang, Qiang Liu, Yusheng Li, and Mingwang Gao.
+Lightcspnet: A lightweight network for image classiﬁcation
+and objection detection. International Journal of Computa-
+tional Intelligence Systems, 16(1):46, 2023. 2
+[46] Sanghyun Woo, Shoubhik Debnath, Ronghang Hu, Xinlei
+Chen, Zhuang Liu, In So Kweon, and Saining Xie. Con-
+vnext v2: Co-designing and scaling convnets with masked
+autoencoders. In Proceedings of the IEEE/CVF conference
+on computer vision and pattern recognition , pages 16133–
+16142, 2023. 3, 5, 6
+[47] Xizhi Wu, Rongzhe Liu, Hanqing Yang, and Zizhao Chen. An
+xception based convolutional neural network for scene image
+classiﬁcation with transfer learning. In 2020 2nd Interna-
+tional Conference on Information Technology and Computer
+Application (ITCA), pages 262–267, 2020. 4, 6
+[48] Zelin Zang, Siyuan Li, Di Wu, Ge Wang, Kai Wang, Lei
+Shang, Baigui Sun, Hao Li, and Stan Z Li. Dlme: Deep
+local-ﬂatness manifold embedding. In European Conference
+on Computer Vision, pages 576–592. Springer, 2022. 7
+[49] Zhong-Qiu Zhao, Peng Zheng, Shou-Tao Xu, and Xindong
+Wu. Object detection with deep learning: A review. IEEE
+Transactions on Neural Networks and Learning Systems,3 0
+(11):3212–3232, 2019. 1
+[50] Xiawu Zheng, Chenyi Yang, Shaokun Zhang, Yan Wang,
+Baochang Zhang, Yongjian Wu, Yunsheng Wu, Ling Shao,
+and Rongrong Ji. Ddpnas: Eﬃcient neural architecture search
+via dynamic distribution pruning. International Journal of
+Computer Vision, 131(5):1234–1249, 2023. 2
+[51] Yan Zhou, Shaochang Chen, Yiming Wang, and Wenming
+Huan. Review of research on lightweight convolutional neu-
+ral networks. In 2020 IEEE 5th Information Technology
+2719
+
+=== PAGE 11 ===
+and Mechatronics Engineering Conference (ITOEC), pages
+1713–1720, 2020. 2
+2720

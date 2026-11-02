@@ -1,25 +1,25 @@
-"""Evaluate a trained model with test-time augmentation (TTA).
+"""Evaluate a trained model with MCG-TTA (Multi-Scale Consistency-Guided TTA).
 
---tta accepts: none | full | all | or a comma-separated subset of strategies:
-  conf       confidence gate: max prob < tau -> all K views
-  subject    patient gate: subject-mean confidence < tau -> all views
-  weakclass  predicted minority class OR conf < tau -> all views (targets LGG recall)
-  disagree   conf < tau -> hflip probe; escalate to remaining views on argmax flip
-  scalempac  conf < tau -> scale+/- probes; escalate on disagreement.
-             Mirrors the MPAC block's multi-dilation paths: scale-sensitive
-             inputs are exactly where multi-path fusion is unstable.
+--tta accepts: none | full | mcgtta
+  none     plain inference - baseline sanity check (must reproduce evaluate.py)
+  full     every sample gets K views, prob = mean over views (accuracy ceiling)
+  mcgtta   confidence gate (max prob < --tau) -> scale+/- probe views; escalate
+           to the remaining views only when the probes disagree with the base
+           prediction or with each other. Probes mirror the MPAC block's
+           multi-dilation paths: scale-sensitive inputs are exactly where
+           multi-path fusion is unstable.
 
-`--tta all` runs all five on ONE cached views pass (union of all trigger sets),
-then replays each strategy's gate/escalation exactly.
+The views pass runs once on the union of gated rows, then the gate/escalation
+is replayed exactly per tau -- so --tau-sweep costs one inference pass.
 
 Outputs land in a NEW run dir: results/runs/<ts>_tta_<name>/metrics/
-  <model>_<variant>[_<split>]_predictions.csv   (variant e.g. base/tta5/conf5_t80)
+  <model>_<variant>[_<split>]_predictions.csv   (variant e.g. base/tta6/mcgtta6_t80)
   *_metrics.json, *_subject_metrics.json, *_timing.json, confusion matrix + ROC
-  tta_strategies_summary.csv when several strategies/taus are evaluated
+  tta_strategies_summary.csv when a tau sweep is evaluated
 
     python scripts/evaluate_tta.py --model lsnet --config configs/config_brats.yaml ^
-        --checkpoint results/runs/<run>/models/lsnet/best.pt --tta all --tau 0.8
-    python scripts/evaluate_tta.py --model lsnet --tta all --split val ^
+        --checkpoint results/runs/<run>/models/lsnet/best.pt --tta mcgtta --tau 0.8
+    python scripts/evaluate_tta.py --model lsnet --tta mcgtta --split val ^
         --tau-sweep 0.60 0.70 0.75 0.80 0.85 --checkpoint <ckpt>
 """
 
@@ -39,9 +39,8 @@ from scripts.evaluate import apply_restrict_classes, macro_auc
 from src.evaluation.complexity import measure_inference_time
 from src.evaluation.metrics import compute_metrics
 from src.evaluation.plots import plot_confusion_matrix, plot_roc_curves
-from src.evaluation.tta import (STRATEGY_NAMES, build_tta_views, forward_views,
-                                load_raw_images, run_tta_eval, simulate_strategy,
-                                union_trigger)
+from src.evaluation.tta import (build_tta_views, forward_views, load_raw_images,
+                                run_tta_eval, simulate_mcgtta, union_trigger)
 from src.models.model_factory import build_model
 from src.training.checkpoint import load_checkpoint
 from src.utils.config import load_config, seed_everything
@@ -50,20 +49,19 @@ from src.utils.tracking import add_log_file, get_logger, log_experiment
 
 logger = get_logger("evaluate_tta", Path("results/logs/evaluate_tta.log"))
 
+MODES = ("none", "full", "mcgtta")
 
-def parse_strategies(spec: str) -> list[str]:
+
+def parse_modes(spec: str) -> list[str]:
     out = []
     for s in spec.split(","):
         s = s.strip().lower()
-        if s == "all":
-            out += list(STRATEGY_NAMES)
-        elif s == "selective":
-            out.append("conf")
-        elif s in ("none", "full") or s in STRATEGY_NAMES:
+        if s in ("mcgtta", "scalempac", "all", "selective"):  # legacy aliases
+            out.append("mcgtta")
+        elif s in MODES:
             out.append(s)
         else:
-            raise SystemExit(
-                f"unknown --tta '{s}'; choices: none,full,all,{','.join(STRATEGY_NAMES)}")
+            raise SystemExit(f"unknown --tta '{s}'; choices: {','.join(MODES)}")
     return list(dict.fromkeys(out))
 
 
@@ -150,9 +148,9 @@ def log_line(stem: str, m: dict, subj: dict | None,
                 m["accuracy"], m["f1_macro"], m["auc_macro"], trig, s)
 
 
-def summary_row(model_name, strategy, variant, tau, n_samples, n_trig, n_esc,
+def summary_row(model_name, mode, variant, tau, n_samples, n_trig, n_esc,
                 extra, base_single_ms, m, subj, classes):
-    row = {"model": model_name, "strategy": strategy, "variant": variant,
+    row = {"model": model_name, "strategy": mode, "variant": variant,
            "tau": tau, "n_triggered": int(n_trig),
            "trigger_rate": round(n_trig / n_samples, 4),
            "n_escalated": int(n_esc), "extra_forwards": int(extra),
@@ -176,16 +174,14 @@ def main() -> None:
     p.add_argument("--config", default=None)
     p.add_argument("--split", default="test", choices=["train", "val", "test"])
     p.add_argument("--csv", default=None, help="Manifest CSV (overrides --split)")
-    p.add_argument("--tta", default="conf",
-                   help="none|full|all|conf,subject,weakclass,disagree,scalempac")
+    p.add_argument("--tta", default="mcgtta",
+                   help="none|full|mcgtta (comma-separated list allowed)")
     p.add_argument("--tau", type=float, default=0.8,
-                   help="Confidence gate: enter TTA when max prob < tau")
+                   help="Confidence gate: enter MCG-TTA when max prob < tau")
     p.add_argument("--tau-sweep", nargs="+", type=float, default=None,
                    help="Evaluate a grid of taus in one pass (views computed once)")
-    p.add_argument("--tta-views", type=int, default=5,
-                   help="Total views including identity (max 6; scalempac wants 6)")
-    p.add_argument("--weak-class", default=None,
-                   help="Class name for 'weakclass' strategy (default: least frequent)")
+    p.add_argument("--tta-views", type=int, default=6,
+                   help="Total views including identity (max 6; mcgtta uses the scale views)")
     p.add_argument("--budget", type=float, default=0.28,
                    help="Max trigger rate used for the sweep's tau recommendation")
     p.add_argument("--batch-size", type=int, default=None)
@@ -217,10 +213,8 @@ def main() -> None:
     df = df.reset_index(drop=True)
     logger.info("Manifest %s -> %d samples (%s)", manifest, len(df), eval_name)
 
-    strategies = parse_strategies(args.tta)
-    if "subject" in strategies and "subject" not in df.columns:
-        raise SystemExit("'subject' strategy requires a 'subject' column in the manifest")
-    logger.info("Strategies: %s | device: %s", strategies, device)
+    modes = parse_modes(args.tta)
+    logger.info("Modes: %s | device: %s", modes, device)
 
     model = build_model(cfg, name=args.model).to(device)
     ckpt_data = load_checkpoint(Path(args.checkpoint), model, device=device)
@@ -236,13 +230,11 @@ def main() -> None:
     y_true = df["label_idx"].to_numpy()
 
     try:
-        # Engine A: real wall-clock gated execution (single mode, no sweep)
-        if len(strategies) == 1 and not args.tau_sweep \
-                and strategies[0] in ("none", "full", "conf", "subject"):
-            mode = {"conf": "selective"}.get(strategies[0], strategies[0])
-            res = run_tta_eval(model, df, cfg, device, mode=mode, tau=args.tau,
+        # Real wall-clock path for none/full (single mode, no sweep)
+        if len(modes) == 1 and modes[0] in ("none", "full") and not args.tau_sweep:
+            res = run_tta_eval(model, df, cfg, device, mode=modes[0],
                                n_views=args.tta_views, batch_size=batch_size)
-            variant = variant_name(strategies[0], args.tau, args.tta_views)
+            variant = variant_name(modes[0], args.tau, args.tta_views)
             probs, trigger = res["probs"], res["trigger"]
             yt = y_true
             if args.restrict_classes:
@@ -268,17 +260,15 @@ def main() -> None:
                            path=Path(cfg.paths.results) / "experiments.csv",
                            run_id=run_dir.name)
 
-        # Engine B: union pass + exact simulation of every requested strategy
+        # Union pass + exact gate/escalation replay (mcgtta, sweeps, mixed lists)
         else:
             taus = args.tau_sweep or [args.tau]
             views = build_tta_views(cfg)[:max(1, args.tta_views)]
             view_names = [v[0] for v in views]
             n = len(df)
-            weak_idx = None
-            if "weakclass" in strategies:
-                weak_idx = (classes.index(args.weak_class) if args.weak_class
-                            else int(df["label_idx"].value_counts().idxmin()))
-                logger.info("Weak class: %s (idx %d)", classes[weak_idx], weak_idx)
+            if "mcgtta" in modes and not any(v.startswith("scale") for v in view_names):
+                logger.warning("mcgtta needs scale probe views; use --tta-views 5 or 6 "
+                               "(got %d)", len(views))
 
             imgs = load_raw_images(df)
             p0 = forward_views(model, imgs, views[:1], device, batch_size,
@@ -286,34 +276,31 @@ def main() -> None:
             if device.type == "cuda":
                 torch.cuda.synchronize()
 
-            if "full" in strategies:
-                idx_T = np.arange(n)
-            else:
-                idx_T = union_trigger(p0, df, taus, weak_idx)
+            idx_T = np.arange(n) if "full" in modes else union_trigger(p0, taus)
             logger.info("Union trigger set: %d/%d rows (%.1f%%) get extra views once",
                         len(idx_T), n, 100 * len(idx_T) / n)
             rest = forward_views(model, [imgs[i] for i in idx_T], views[1:],
                                  device, batch_size,
-                                 desc=f"Views on {len(idx_T)} union rows") \
+                                 desc=f"Views on {len(idx_T)} gated rows") \
                 if len(idx_T) and len(views) > 1 \
                 else np.zeros((len(idx_T), 0, p0.shape[1]))
             probs_T = np.concatenate([p0[idx_T][:, None], rest], axis=1)
 
             rows = []
-            combos = [(t, s) for t in taus for s in strategies]
-            for tau, strat in tqdm(combos, desc="Strategies"):
-                if strat == "none":
+            combos = [(t, s) for t in taus for s in modes]
+            for tau, mode in tqdm(combos, desc="Evaluating"):
+                if mode == "none":
                     probs, trig = p0.copy(), np.zeros(n, dtype=bool)
                     extra, n_esc = 0, 0
-                elif strat == "full":
-                    # idx_T was forced to all rows, so probs_T covers everything
+                elif mode == "full":
+                    # idx_T covers all rows, so probs_T has every view
                     probs = probs_T.mean(axis=1)
                     trig = np.ones(n, dtype=bool)
                     extra, n_esc = n * (len(views) - 1), 0
                 else:
-                    probs, trig, extra, n_esc = simulate_strategy(
-                        probs_T, idx_T, p0, df, tau, strat, view_names, weak_idx)
-                variant = variant_name(strat, tau, args.tta_views)
+                    probs, trig, extra, n_esc = simulate_mcgtta(
+                        probs_T, idx_T, p0, tau, view_names)
+                variant = variant_name(mode, tau, args.tta_views)
                 yt = y_true
                 pc = probs
                 if args.restrict_classes:
@@ -324,7 +311,7 @@ def main() -> None:
                                        figures=(len(combos) == 1))
                 ext = "" if eval_name == "test" else f"_{eval_name}"
                 stem = f"{args.model}_{variant}{ext}"
-                timing = {"mode": strat, "tau": tau, "n_views": len(views),
+                timing = {"mode": mode, "tau": tau, "n_views": len(views),
                           "n_samples": n, "n_triggered": int(trig.sum()),
                           "trigger_rate": float(trig.mean()),
                           "n_escalated": n_esc, "extra_forwards": extra,
@@ -334,10 +321,10 @@ def main() -> None:
                 with open(Path(cfg.paths.metrics) / f"{stem}_timing.json", "w") as f:
                     json.dump(timing, f, indent=2)
                 log_line(stem, m, subj, trig.mean())
-                logger.info("  %s: entered=%d escalated=%d extra_fwd=%d "
+                logger.info("  %s: gated=%d escalated=%d extra_fwd=%d "
                             "modelled=%.2f ms", stem, int(trig.sum()), n_esc,
                             extra, timing["modelled_ms"])
-                rows.append(summary_row(args.model, strat, variant, tau, n,
+                rows.append(summary_row(args.model, mode, variant, tau, n,
                                         int(trig.sum()), n_esc, extra,
                                         base_single_ms, m, subj, classes))
                 if len(taus) == 1:
@@ -348,10 +335,9 @@ def main() -> None:
                                    run_id=run_dir.name)
 
             out = Path(cfg.paths.metrics) / "tta_strategies_summary.csv"
-            pd.DataFrame(rows).to_csv(out, index=False)
-            logger.info("Wrote %s", out)
             summ = pd.DataFrame(rows)
-            logger.info("\n%s", summ.round(4).to_string(index=False))
+            summ.to_csv(out, index=False)
+            logger.info("Wrote %s\n%s", out, summ.round(4).to_string(index=False))
             if args.tau_sweep:
                 ok = summ[summ["trigger_rate"] <= args.budget]
                 if not ok.empty:
